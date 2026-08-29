@@ -592,8 +592,8 @@ export const settings = {
     warpAt: 0.2,
     /** Fraction of *that* window the turn finishes in: face first, then close. */
     turnAt: 0.5,
-    /** Normalised time the foot plants — the furthest it reaches. */
-    hitAt: 0.21,
+    /** Normalised time the blow connects — the leg up and over, into the flip. */
+    hitAt: 0.49,
     /** Metres the strike still lands at, measured at `hitAt`. */
     reach: 2.0,
     /** Normalised time the stick is handed back, as both feet touch down. */
