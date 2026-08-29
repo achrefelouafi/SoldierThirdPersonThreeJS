@@ -369,7 +369,7 @@ export const settings = {
   /* The slide cut                                                       */
   /* ------------------------------------------------------------------ */
   /**
-   * `R` — the gap closer. Same machine again (`animation/Attack.js`), and the
+   * `T` — the gap closer. Same machine again (`animation/Attack.js`), and the
    * one of the three whose *approach* is the move rather than a way of reaching
    * one.
    *
@@ -491,6 +491,144 @@ export const settings = {
     shake: 0.28,
     /** A sword, at the waist: the body it lands on comes apart. */
     slices: true
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* The flip kick                                                       */
+  /* ------------------------------------------------------------------ */
+  /**
+   * `Q` — the disengage. The same machine again (`animation/Attack.js`), and
+   * the only one of the four that *leaves*.
+   *
+   * The clip (`Flipkick.fbx`) runs 2.02 seconds at 60fps: a short run, a foot
+   * planted high on a body, and a backflip off it. Read off the hips and the
+   * right foot, with the hips frozen horizontally by `_retarget` as ever, so
+   * every distance below is the foot's lead on the root rather than the ground
+   * the export covers:
+   *
+   *  - **0 → 0.15** the run-up. The hips carry 1.2 m in the export's own units
+   *    and the feet cycle twice; the ground is the warp's to supply.
+   *  - **0.15 → 0.21** the leg comes through. The right foot swings from level
+   *    with the hips to 0.58 m ahead of them and 0.8 m off the floor, furthest
+   *    out at 0.20 — waist height on a body of the same size, which is `hitAt`.
+   *  - **0.21 → 0.40** the push. The foot stops dead in space at that height
+   *    while the hips climb past and over it: the body is standing on what it
+   *    just kicked and using it to get off the ground. Nothing may move the
+   *    root through these frames or the foot skates across the chest under it,
+   *    which is what `passFrom` is for.
+   *  - **0.40 → 0.72** the flip. Feet leave, the hips rise 1.1 m and the whole
+   *    body turns over backwards once. The vertical is the clip's own and
+   *    `_retarget` keeps it, so the arc costs nothing here.
+   *  - **0.72** both feet down, hips back at standing height. Control returns
+   *    here rather than at the end — the last quarter of the export sinks into
+   *    a deep crouch nobody asked for, and `blendOut` covers the first of it.
+   *
+   * Its place among the other three is the negative `passThrough`: the kick
+   * stops in front of a body, the slide cut goes through one, and this one
+   * comes off one. That is what it is *for* — a way out of a crowd that costs
+   * a body on the way, rather than a way further into it.
+   */
+  flipKick: {
+    enabled: true,
+    /**
+     * Metres a target can be locked from.
+     *
+     * A short run rather than a slide: further than the standing kick reaches,
+     * nothing like the ground the slide cut crosses.
+     */
+    range: 3.6,
+    /** Full width of the search cone, degrees. */
+    cone: 120,
+    /**
+     * Metres from the target's centre the foot is planted from.
+     *
+     * The shortest of the four, and it has to be: the contact is a leg folded
+     * up at waist height, not one thrown straight out — 0.69 m of lead on the
+     * root against the standing kick's 0.98. At this the foot lands a little
+     * inside the body's own radius, which is where a push-off belongs.
+     */
+    standoff: 0.95,
+    /**
+     * Ceiling on the warp, metres.
+     *
+     * Read off the export's own run-up, which carries about 1.7 m in the
+     * `warpAt` window — so at a typical engagement the body covers the ground
+     * at the pace the legs are cycling at, and only a press taken at the very
+     * edge of `range` overdrives it into a lunge.
+     */
+    maxWarp: 2.5,
+    /**
+     * Metres back off the mark the flip finishes — negative, and the whole
+     * point of the move.
+     *
+     * `animation/Attack.js` reads the sign: forward is ground on the far side
+     * of a body, backwards is a shove off one. The export nets out roughly
+     * where it planted, because the animator had no body to push against; this
+     * is the push it implies.
+     */
+    passThrough: -1.15,
+    /**
+     * Normalised time the recoil is allowed to start.
+     *
+     * The frame the foot leaves the chest. Before it the body is standing on
+     * the target and the root is pinned to the mark; travelling any earlier
+     * drags the planted foot sideways across what it is standing on.
+     */
+    passFrom: 0.4,
+    /**
+     * Normalised time the recoil finishes — the frame the feet touch down.
+     *
+     * The same number as `recoverAt`, so the body has stopped travelling on
+     * the frame the player takes it over.
+     */
+    passAt: 0.74,
+    /**
+     * Fraction of the clip the approach takes.
+     *
+     * The frame the leg comes through, so the body is on its mark before the
+     * foot is out. Short, because the run-up in the export is short — the
+     * approach is the fastest of the four and it should be.
+     */
+    warpAt: 0.2,
+    /** Fraction of *that* window the turn finishes in: face first, then close. */
+    turnAt: 0.5,
+    /** Normalised time the foot plants — the furthest it reaches. */
+    hitAt: 0.21,
+    /** Metres the strike still lands at, measured at `hitAt`. */
+    reach: 2.0,
+    /** Normalised time the stick is handed back, as both feet touch down. */
+    recoverAt: 0.74,
+    /**
+     * How much faster than authored the clip is played.
+     *
+     * Two seconds is a long time to hold a player still. At 1.2 the move is
+     * 1.68 seconds end to end and the commitment 1.24, which puts it between
+     * the kick and the slide cut.
+     */
+    timeScale: 1.2,
+    /** Seconds to fade the move over the gait, and back off it. */
+    blendIn: 0.08,
+    blendOut: 0.2,
+
+    /**
+     * m/s along the blow, and straight up.
+     *
+     * The hardest shove of the four and the one that lifts least: this is a
+     * whole body's weight driven through one heel and then pushed *away* from,
+     * so what it lands on goes back rather than up. The two bodies leave the
+     * contact in opposite directions, which is the read the move lives on.
+     */
+    impulse: 8.4,
+    lift: 3.2,
+    /** Upper body multiplier — high, so the body folds over the heel and goes. */
+    spin: 1.9,
+    /** Seconds the world nearly stops on contact, and how far down it goes. */
+    hitStop: 0.09,
+    hitStopScale: 0.05,
+    /** Metres the lens is kicked. */
+    shake: 0.22,
+    /** A heel, and no blade anywhere near it — see `settings.slice`. */
+    slices: false
   },
 
   /* ------------------------------------------------------------------ */

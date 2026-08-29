@@ -100,6 +100,15 @@ export const ABILITIES = [
     attack: true
   },
   {
+    id: 'flipKick',
+    category: 'technique',
+    label: 'Flip Kick',
+    hotkey: 'Q',
+    code: 'KeyQ',
+    note: 'Runs it down, plants a heel in its chest and backflips off it — the way out.',
+    attack: true
+  },
+  {
     id: 'shadows',
     category: 'ability',
     label: 'Shadows',

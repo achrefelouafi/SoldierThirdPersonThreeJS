@@ -1189,12 +1189,13 @@ export class Editor {
     const folder = this.gui.addFolder('Combat');
     const R = Editor.range;
 
-    // One folder per move, built from the same three groups — the two attacks
-    // are the same machine (`animation/Attack.js`) with different numbers, so
-    // there is nothing to say about one of them that is not a field on both.
+    // One folder per move, built from the same three groups — every attack is
+    // the same machine (`animation/Attack.js`) with different numbers, so there
+    // is nothing to say about one of them that is not a field on all of them.
     this._buildAttack(folder, settings.kick, 'Kick (E)');
     this._buildAttack(folder, settings.slashHit, 'Slash hit (R)');
     this._buildAttack(folder, settings.crouchSlash, 'Slide cut (T)');
+    this._buildAttack(folder, settings.flipKick, 'Flip kick (Q)');
     this._buildTargetRing(folder);
     this._buildSlice(folder);
 
@@ -1277,10 +1278,13 @@ export class Editor {
     R(aim, config, 'maxWarp', 0, 12, 0.05, 'max step in (m)');
     R(aim, config, 'warpAt', 0.05, 0.9, 0.01, 'approach ends at');
     R(aim, config, 'turnAt', 0.05, 1, 0.01, 'turn done by');
-    // Only the slide cut goes through the body rather than up to it, so these
-    // two are on the block that asked for them rather than on every move.
+    // Only the two moves that do not stop on their mark carry these, so they
+    // are on the blocks that asked for them rather than on every move. The
+    // sign on the first is the direction: positive is the far side of the body
+    // (the slide cut), negative is back off it (the flip kick).
     if ('passThrough' in config) {
-      R(aim, config, 'passThrough', 0, 5, 0.05, 'ends past by (m)');
+      R(aim, config, 'passThrough', -5, 5, 0.05, 'ends off mark by (m)');
+      if ('passFrom' in config) R(aim, config, 'passFrom', 0.05, 1, 0.01, 'leaves the mark at');
       R(aim, config, 'passAt', 0.1, 1, 0.01, 'pass ends at');
     }
 

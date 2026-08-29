@@ -91,6 +91,17 @@ export const ABILITY_ICONS = {
       `<path d="M2.6 6.6h4.6M3.8 9.6h3.2" stroke-width="1.4" opacity="0.45"/>`
   ),
 
+  // The body upside down mid-turn, the heel still out where it planted, and
+  // the loop of the flip open behind it. The arrowhead is on the *back* of the
+  // loop rather than the front: this is the one technique that leaves.
+  flipKick: stroke(
+    `<path d="M16.6 4.6a7.4 7.4 0 1 1-9.2 2.2" stroke-width="1.4" opacity="0.6"/>` +
+      `<path d="M6 10.6 7 6.2 11.2 7.6" stroke-width="1.4" opacity="0.6"/>` +
+      `<circle cx="10.4" cy="18.4" r="1.7" fill="currentColor" stroke="none"/>` +
+      `<path d="M10.6 17.6 12.6 12.4 17 12.2" stroke-width="2.1"/>` +
+      `<path d="M16.4 10.6 20.8 11.2 20.4 13.9 16 13.4z" fill="currentColor" stroke="none"/>`
+  ),
+
   // Two of you: the one that goes, and the one that follows it out.
   shadows: stroke(
     `<g opacity="0.42">${figure(16)}</g>` + `<g>${figure(8.4, 'rgba(6, 8, 11, 0.92)')}</g>`

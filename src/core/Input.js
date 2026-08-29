@@ -52,7 +52,7 @@ export class Input {
      */
     this._jump = false;
     /**
-     * One buffered press per attack (`E`, `R`, `T`), on the jump's exact terms.
+     * One buffered press per attack (`E`, `R`, `T`, `Q`), on the jump's exact terms.
      *
      * Keyed by ability id — the same word the move's settings block and its
      * `Attack` instance are named by, so the controller can ask for a press by

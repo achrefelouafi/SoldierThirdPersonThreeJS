@@ -26,7 +26,7 @@ const _travel = new Vector2(); // ground covered by the jump this frame, model f
  * to where the character ends up. Space at any lesser pace plays the in-place
  * hop over the top instead, and movement carries on underneath it untouched.
  *
- * The attacks (`E` to kick, `R` to jump onto something) are the same shape of
+ * The attacks (`E`, `R`, `T` and `Q`) are the same shape of
  * thing again, one step further: each locks the stick out *and* takes the
  * transform over outright, because `Attack` has resolved exactly where the body
  * has to stand for the blow to land (see that file). This class stays the only

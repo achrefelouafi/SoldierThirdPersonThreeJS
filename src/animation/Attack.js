@@ -4,11 +4,11 @@ import { settings } from '../config/settings.js';
 /**
  * One melee attack: the clip, its blend over the gait, and the warp that aims it.
  *
- * There is one of these per move — the kick (`E`) and the slash hit (`R`) are
- * both instances, differing only in the clip they were handed and the
- * `configKey` they read their numbers from. Anything that has to be true of
- * *an* attack lives here; anything that makes one of them feel like itself is a
- * number in `config/settings.js`.
+ * There is one of these per move — the kick (`E`), the slash hit (`R`), the
+ * slide cut (`T`) and the flip kick (`Q`) are all instances, differing only in
+ * the clip they were handed and the `configKey` they read their numbers from.
+ * Anything that has to be true of *an* attack lives here; anything that makes
+ * one of them feel like itself is a number in `config/settings.js`.
  *
  * ## Why a warp
  *
@@ -84,10 +84,11 @@ export class Attack {
     this._from = { x: 0, z: 0, yaw: 0 };
     this._to = { x: 0, z: 0, yaw: 0 };
     /**
-     * Where a pass-through move ends up, on the far side of the body.
+     * Where a move that does not stop on its mark ends up.
      *
      * Only meaningful for a move with `passThrough` — for everything else it is
      * the contact mark itself, and the second leg of the warp has no length.
+     * Positive is the far side of the body, negative is back the way it came.
      */
     this._past = { x: 0, z: 0 };
   }
@@ -178,8 +179,10 @@ export class Attack {
    * the body nowhere — it only turns, because backing *away* to make room for
    * an animation is the tell that gives motion warping away.
    *
-   * A move with `passThrough` resolves a second point past the first, down the
-   * same line: it does not stop in front of what it hits, it goes through it.
+   * A move with `passThrough` resolves a second point off the first, down the
+   * same line: it does not stop in front of what it hits. Which way it leaves
+   * is the sign — forward through the body, or back off it the way a flip kick
+   * pushes away from what it just planted a foot on.
    */
   _resolveWarp(target) {
     const position = this.character.position;
@@ -210,12 +213,19 @@ export class Attack {
     to.x = position.x + dx * k;
     to.z = position.z + dz * k;
 
-    // And how far past it, for a move that goes through rather than up to: the
-    // standoff it was going to stop at, plus the ground it should end up on
-    // behind the body. Measured from the contact mark rather than from the
-    // target, so a warp cut short by `maxWarp` still travels its own length
-    // instead of teleporting the shortfall.
-    const beyond = config.passThrough > 0 ? config.standoff + config.passThrough : 0;
+    // And how far off it the move finishes. Both are measured from the contact
+    // mark rather than from the target, so a warp cut short by `maxWarp` still
+    // travels its own length instead of teleporting the shortfall — but they
+    // are stated from different ends, because they mean different things:
+    //
+    //  - **Forward** (`passThrough > 0`) is stated from the *target*: it is
+    //    ground on the far side of a body, so what it needs to clear is the
+    //    body. Hence the standoff it was going to stop at, plus that.
+    //  - **Backwards** (`passThrough < 0`) is stated from the *mark*: a recoil
+    //    is a shove off the thing it hit, and how far it carries has nothing to
+    //    do with how thick that thing was.
+    const passThrough = config.passThrough ?? 0;
+    const beyond = passThrough > 0 ? config.standoff + passThrough : passThrough;
     const ux = distance > 1e-4 ? dx / distance : Math.sin(to.yaw);
     const uz = distance > 1e-4 ? dz / distance : Math.cos(to.yaw);
     this._past.x = to.x + ux * beyond;
@@ -290,22 +300,46 @@ export class Attack {
     const t = MathUtils.clamp(phase / warpAt, 0, 1);
     const turn = smootherstep(MathUtils.clamp(t / Math.max(0.05, config.turnAt), 0, 1));
 
-    if (config.passThrough > 0) {
-      // Two legs of one straight line — the contact mark is on the way to the
-      // far side, not the end of the trip. The easing is split rather than
-      // shared so the body never stops on the mark: it accelerates onto it,
-      // carries that speed through the frames the blade is out, and only runs
-      // out of it once it is past. A smootherstep on each leg would put a dead
-      // frame exactly where the cut is, and the slide would read as two moves.
+    const passThrough = config.passThrough ?? 0;
+    if (passThrough !== 0) {
+      // Two legs of one straight line, and which easing each gets is the whole
+      // difference between a move that goes *through* what it hits and one that
+      // comes *off* it.
+      //
+      // Going through, the easing is split rather than shared so the body never
+      // stops on the mark: it accelerates onto it, carries that speed through
+      // the frames the blade is out, and only runs out of it once it is past. A
+      // smootherstep on each leg would put a dead frame exactly where the cut
+      // is, and the slide would read as two moves.
+      //
+      // Coming off it, the dead frame is exactly what is wanted — it is the
+      // frame the foot is planted. So both legs are smoothersteps: the body
+      // eases onto the mark and stops, and the recoil eases away from it and
+      // stops again on the landing. The reversal reads as a shove precisely
+      // because the body was still for a moment in the middle of it.
+      //
+      // Between the two legs the body sits on the mark for as long as
+      // `passFrom` says. A move that goes through wants no such gap and does
+      // not ask for one — the field defaults to `warpAt`, so the second leg
+      // picks up on the frame the first puts down and the split easing is
+      // exactly as it was. A move that pushes off something needs the gap:
+      // it is the frames the foot is *on* the body, and travelling through
+      // them would slide the foot across the chest it is standing on.
+      const forward = passThrough > 0;
       const past = this._past;
+      const passFrom = MathUtils.clamp(config.passFrom ?? warpAt, warpAt, 1);
       if (phase <= warpAt) {
-        const move = t * t; // off the standing pose, arriving at speed
+        const move = forward ? t * t : smootherstep(t); // arriving at speed, or planted
         this.warp.x = from.x + (to.x - from.x) * move;
         this.warp.z = from.z + (to.z - from.z) * move;
+      } else if (phase < passFrom) {
+        this.warp.x = to.x; // planted, and going nowhere until the foot is free
+        this.warp.z = to.z;
       } else {
-        const passAt = Math.max(warpAt + 0.01, config.passAt ?? 1);
-        const u = MathUtils.clamp((phase - warpAt) / (passAt - warpAt), 0, 1);
-        const move = 1 - (1 - u) * (1 - u); // through, and coasting to a stop
+        const passAt = Math.max(passFrom + 0.01, config.passAt ?? 1);
+        const u = MathUtils.clamp((phase - passFrom) / (passAt - passFrom), 0, 1);
+        // Through and coasting to a stop, or off the mark and settling onto it.
+        const move = forward ? 1 - (1 - u) * (1 - u) : smootherstep(u);
         this.warp.x = to.x + (past.x - to.x) * move;
         this.warp.z = to.z + (past.z - to.z) * move;
       }

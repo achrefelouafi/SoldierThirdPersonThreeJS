@@ -52,7 +52,11 @@ const ANIMATION_URLS = {
   // is dropped on the floor of `_retarget`.
   kick: './animations/fight animations/Kick.fbx',
   slashHit: './animations/fight animations/Slash.fbx',
-  crouchSlash: './animations/fight animations/Crouchslash.fbx'
+  crouchSlash: './animations/fight animations/Crouchslash.fbx',
+  // The one attack that is skeleton-only like the gaits above, and the one
+  // whose vertical matters: the backflip's whole arc is in the hips track, and
+  // `_retarget` keeps it for free.
+  flipKick: './animations/Flipkick.fbx'
 };
 
 /**
@@ -146,6 +150,8 @@ export class CharacterController {
     this.slashHit = null;
     /** The sliding crouch cut — the same machine again, a much longer approach. */
     this.crouchSlash = null;
+    /** The flip kick — the same machine once more, and the one that leaves. */
+    this.flipKick = null;
     /**
      * Every attack the body has, in the order a press is offered to them.
      *
@@ -271,7 +277,12 @@ export class CharacterController {
     this.crouchSlash = new Attack(this.mixer, this.clips.get('crouchSlash'), this, {
       configKey: 'crouchSlash'
     });
-    this.attacks = [this.attack, this.slashHit, this.crouchSlash].filter(
+    // The flip kick travels twice: onto the body it plants a foot on, and then
+    // back off it. Both legs are the same warp — see `settings.flipKick`.
+    this.flipKick = new Attack(this.mixer, this.clips.get('flipKick'), this, {
+      configKey: 'flipKick'
+    });
+    this.attacks = [this.attack, this.slashHit, this.crouchSlash, this.flipKick].filter(
       (move) => move.available
     );
 
@@ -786,6 +797,7 @@ export class CharacterController {
     this.attack = null;
     this.slashHit = null;
     this.crouchSlash = null;
+    this.flipKick = null;
     this.mixer?.stopAllAction();
     this.mixer = null;
     this.locomotion = null;
