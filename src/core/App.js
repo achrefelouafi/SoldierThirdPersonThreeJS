@@ -28,6 +28,7 @@ import { BladeStorm } from '../vfx/BladeStorm.js';
 import { TargetRings } from '../vfx/TargetRings.js';
 import { TargetMarkers } from '../vfx/TargetMarkers.js';
 import { CharacterScreen } from '../screens/CharacterScreen.js';
+import { findItem } from '../equipment/EquipmentCatalog.js';
 import { LoadingScreen } from '../ui/LoadingScreen.js';
 import { Editor } from '../ui/Editor.js';
 import { Toast } from '../ui/Toast.js';
@@ -291,7 +292,9 @@ export class App {
     this.stats = new Stats();
     // The moves and their keys, along the bottom — one panel per category. Fed a
     // state per ability every frame from `_syncAbilities`; it decides nothing.
-    this.actionHUD = new ActionHUD();
+    // The one chip that is also a control routes its click back here, so the
+    // weapon swap is a button and a key saying the same thing.
+    this.actionHUD = new ActionHUD({ onPress: (id) => this._onAction(id) });
     // The same answer as the ring, over the head instead of under the feet: the
     // ring says which body, these say with which key. Fed from
     // `_updateTargetRings` — it resolves nothing of its own either.
@@ -358,6 +361,12 @@ export class App {
           event.preventDefault();
           this.toggleCharacterScreen();
           break;
+        case 'Digit1': {
+          // A toggle, so a held key would swap the weapon every frame.
+          if (event.repeat) break;
+          this._switchWeapon();
+          break;
+        }
         case 'KeyX': {
           // Auto-repeat is the key still being held, not a second press — and
           // this one is a toggle, so a held key would flip the mode thirty
@@ -437,6 +446,37 @@ export class App {
   }
 
   /* ------------------------------------------------------------------ */
+
+  /**
+   * A chip along the bottom was clicked.
+   *
+   * The clickable ones are the plain switches (`press` in `config/abilities.js`),
+   * and a click means exactly what the key means — so this routes to the same
+   * place the key handler does rather than growing a second path that can
+   * disagree with it.
+   *
+   * @param {string} id ability id
+   */
+  _onAction(id) {
+    if (id === 'weapon') this._switchWeapon();
+    else if (id === 'customize') this.toggleCharacterScreen();
+  }
+
+  /**
+   * Draw the other weapon.
+   *
+   * Works on both stages: the exchange is a property of the body, and the body
+   * is on screen in either of them. Nothing else moves — the loadout is
+   * untouched, both weapons stay mounted, and only which one is *visible*
+   * changes (see `equipment/WeaponSwitch.js`).
+   */
+  _switchWeapon() {
+    const weapons = this.characterScreen?.weapons;
+    if (!weapons || weapons.switching) return;
+    const previous = weapons.current;
+    if (!weapons.toggle() || weapons.current === previous) return;
+    this.toast.show(`${findItem(weapons.current)?.name ?? weapons.current} in hand`);
+  }
 
   /**
    * Refuse a ground ability while the body is in the air, and say so.
@@ -781,6 +821,9 @@ export class App {
       // Always open, and never `active`: the studio hides this row while it is
       // up (`body.cs-open .hud`), so the only state it can be seen in is ready.
       customize: 'ready',
+      // Lit while the exchange is burning, which is also the window in which a
+      // second press is refused — the chip says so rather than swallowing it.
+      weapon: this.characterScreen?.weapons.switching ? 'active' : 'ready',
       // Lit from the moment `V` arms the mark, not from the moment the pair
       // steps out: the key has been spent either way, and the chip is what says
       // the next press means something else.
@@ -799,6 +842,12 @@ export class App {
             ? 'ready'
             : 'off'
     };
+
+    // The one chip that names a value rather than a move: what is in the hand.
+    const drawn = this.characterScreen?.weapons.current;
+    if (drawn) {
+      this.actionHUD.setLabel('weapon', findItem(drawn)?.name ?? drawn);
+    }
 
     for (const move of this.character.attacks ?? []) {
       state[move.configKey] = move.locked
@@ -918,6 +967,11 @@ export class App {
     // off either stage, so equipping here puts it on the body for the play scene
     // too, and a placement tuned in the screen is the one the world shows.
     await this.characterScreen.equipment.restoreOrDefaults();
+    // Which of the weapons that puts on the body is actually drawn, and the
+    // idle that goes with it. After the loadout, because there is nothing to
+    // draw until the mounts exist — and with no burn, because the body has not
+    // been on screen yet.
+    this.characterScreen.weapons.restore();
 
     this.loading.setProgress(0.85, 'Compiling shaders…');
     // Compile everything up front so the first frame never stutters — both
@@ -1051,9 +1105,14 @@ export class App {
 
     this.environment.setFocus(position.x, position.z, groundY);
     this.environment.update();
-    // Gear rides the skeleton, so this is only the mounts' scale against a rig
-    // the editor may have just re-normalised.
-    this.characterScreen?.equipment.update();
+    // Gear rides the skeleton, so this is mostly the mounts' scale against a rig
+    // the editor may have just re-normalised — plus the clock for any piece
+    // that animates itself, which is why it takes the simulation's `dt`: a
+    // rifle's ring slows with the hit-stop like everything else on the body.
+    this.characterScreen?.equipment.update(dt);
+    // And which weapon is in the hand. On the same clock and for the same
+    // reason: a swap started a frame before a blow lands is part of the blow.
+    this.characterScreen?.weapons.update(dt);
     // Last of the body's followers: the mounts have their final scale and the
     // skeleton its final pose, which is exactly what a shadow steps out of. On
     // the *simulation's* clock, not the real one — a summon that is out there

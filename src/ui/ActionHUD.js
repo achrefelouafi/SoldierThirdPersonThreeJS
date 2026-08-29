@@ -4,10 +4,15 @@ import { createIcon } from './icons.js';
 /**
  * The moves along the bottom of the screen.
  *
- * A read-only HUD: it draws one chip per entry in `config/abilities.js` and is
- * told a state per frame. It knows nothing about what any of them *do* — the
- * app resolves that, because "can this start right now" is already answered by
- * the move itself and duplicating the answer here is how the two drift apart.
+ * Almost a read-only HUD: it draws one chip per entry in `config/abilities.js`
+ * and is told a state per frame. It knows nothing about what any of them *do* —
+ * the app resolves that, because "can this start right now" is already answered
+ * by the move itself and duplicating the answer here is how the two drift apart.
+ *
+ * The one exception is a chip marked `press` in that file, which is a control
+ * as well as a readout: clicking it means exactly what its key means, and the
+ * app is handed the id. Only the plain switches qualify — an aimed ability has
+ * to be aimed, and there is nowhere on a chip to say where.
  *
  * Each `category` gets its own panel and its own shape, because they are not
  * the same kind of thing and a single uniform row said they were:
@@ -40,14 +45,25 @@ import { createIcon } from './icons.js';
  * changed since the previous frame — touches no DOM at all.
  */
 export class ActionHUD {
-  constructor(parent = document.body) {
+  /**
+   * @param {object} [config]
+   * @param {HTMLElement} [config.parent]
+   * @param {((id: string) => void)|null} [config.onPress] a `press` chip was
+   *   clicked — the same thing its key would have meant
+   */
+  constructor({ parent = document.body, onPress = null } = {}) {
     this.element = document.createElement('div');
     this.element.className = 'hud';
+    this.onPress = onPress;
 
     /** @type {Map<string, HTMLElement>} */
     this.chips = new Map();
+    /** id → the element carrying its name, for the ones that rename themselves. */
+    this.names = new Map();
     /** Last state written per id, so an unchanged frame costs nothing. */
     this._state = new Map();
+    /** Last label written per id, for the same reason. */
+    this._labels = new Map();
 
     /** The two bands, in order. A band with no panels is dropped below. */
     const rows = new Map(
@@ -72,8 +88,27 @@ export class ActionHUD {
 
       const chip = CHIPS[category.id](ability);
       chip.title = `${ability.hotkey} — ${ability.note}`;
+
+      if (ability.press) {
+        // A div rather than a button, because the three chip shapes are drawn
+        // rather than styled and a `<button>` would bring a user-agent box with
+        // it. The role and the tabstop are what make that honest.
+        chip.classList.add('is-pressable');
+        chip.setAttribute('role', 'button');
+        chip.tabIndex = 0;
+        chip.addEventListener('click', () => this.onPress?.(ability.id));
+        chip.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          this.onPress?.(ability.id);
+        });
+      }
+
       items.appendChild(chip);
       this.chips.set(ability.id, chip);
+      const name = chip.querySelector('.tech__name, .seal__name, .move__name');
+      if (name) this.names.set(ability.id, name);
+      this._labels.set(ability.id, ability.label);
     }
 
     for (const row of rows.values()) {
@@ -116,6 +151,24 @@ export class ActionHUD {
   }
 
   /**
+   * Rename one chip.
+   *
+   * For the chips whose label is a *value* rather than a name — the weapon
+   * switch says what is in the hand, so the row answers "what am I holding" as
+   * well as "what key changes it". Diffed like the states are, so a frame that
+   * says the same thing again touches no DOM.
+   *
+   * @param {string} id
+   * @param {string} label
+   */
+  setLabel(id, label) {
+    if (this._labels.get(id) === label) return;
+    this._labels.set(id, label);
+    const node = this.names.get(id);
+    if (node) node.textContent = label;
+  }
+
+  /**
    * @param {Record<string, 'ready'|'active'|'off'>} state keyed by ability id;
    *   anything missing is treated as unavailable.
    */
@@ -131,7 +184,9 @@ export class ActionHUD {
 
   dispose() {
     this.chips.clear();
+    this.names.clear();
     this._state.clear();
+    this._labels.clear();
     this.element.remove();
   }
 }

@@ -43,6 +43,7 @@ export class Editor {
     this._buildCamera();
     this._buildCharacter();
     this._buildLocomotion();
+    this._buildWeapons();
     this._buildCombat();
     this._buildStudio();
 
@@ -1133,6 +1134,10 @@ export class Editor {
     R(folder, l, 'acceleration', 1, 60, 0.1, 'acceleration');
     R(folder, l, 'deceleration', 1, 60, 0.1, 'deceleration');
     R(folder, l, 'blendRate', 0.000001, 0.05, 0.000001, 'blend follow');
+    // The cross-fade between the two idles — the plain stand and the rifle one.
+    // Faster than the gait blend: it is answering a weapon appearing in the
+    // hand and has to be done by the time the burn is (see `Weapons` below).
+    R(folder, l, 'stanceRate', 0.0000001, 0.01, 0.0000001, 'stance follow');
 
     const gait = folder.addFolder('Gait');
     R(gait, l, 'idleThreshold', 0, 0.5, 0.001, 'idle below (m/s)');
@@ -1185,6 +1190,39 @@ export class Editor {
    * the height and the ring, which are read when a body is spawned — hit
    * "Respawn all" after moving those.
    */
+  /**
+   * The swap between the katana and the rifle — see `equipment/WeaponSwitch.js`.
+   *
+   * All of it is the *look* of one exchange: how long it takes, how much its
+   * two halves overlap, and what the mask that eats each weapon looks like
+   * while it does. Nothing here decides which weapon is out — that is `1`, the
+   * chip along the bottom, or the Weapon buttons on the character screen.
+   */
+  _buildWeapons() {
+    const folder = this.gui.addFolder('Weapons (the swap)');
+    const w = settings.weapons;
+    const R = Editor.range;
+
+    R(folder, w, 'switchTime', 0.1, 2.5, 0.01, 'swap takes (s)');
+    // 0 empties the hand between the two; past about half and both are simply
+    // on screen together. A quarter reads as one becoming the other.
+    R(folder, w, 'overlap', 0, 0.9, 0.01, 'halves overlap');
+    // Where in that the body's grip changes — it belongs to the weapon
+    // arriving, not to either end of the swap.
+    R(folder, w, 'handover', 0, 1, 0.01, 'grip changes at');
+
+    const mask = folder.addFolder('The mask');
+    mask.addColor(w, 'edgeColor').name('edge colour');
+    R(mask, w, 'edgeEmissive', 0, 24, 0.1, 'edge glow');
+    R(mask, w, 'edgeWidth', 0.01, 0.6, 0.005, 'edge width');
+    // Features per metre. Weapons are small, so this runs far higher than the
+    // same control on a body.
+    R(mask, w, 'detail', 2, 120, 0.5, 'noise detail');
+    // 1 is a clean line travelling the length of the piece; 0 is static eating
+    // it from everywhere at once.
+    R(mask, w, 'rise', 0, 1, 0.01, 'burn along piece');
+  }
+
   _buildCombat() {
     const folder = this.gui.addFolder('Combat');
     const R = Editor.range;

@@ -88,6 +88,59 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
+  /* Weapons                                                             */
+  /* ------------------------------------------------------------------ */
+  /**
+   * The swap between the katana and the rifle — see `equipment/WeaponSwitch.js`.
+   *
+   * There is no draw and no sheathe: one weapon burns away along a noise mask
+   * while the other burns in through the same mask, and the two overlap so the
+   * hand is never empty. The whole trick is that the mask is *shared* — the same
+   * pattern, run backwards — which is what makes the two halves read as one
+   * exchange rather than as two separate effects that happen to be adjacent.
+   */
+  weapons: {
+    /** Seconds from the press to the new weapon standing solid. */
+    switchTime: 0.62,
+    /**
+     * How much of that the two halves share, 0..0.9.
+     *
+     * 0 is strictly one then the other and leaves a visible empty hand in the
+     * middle; anything past about half and the two are simply on screen
+     * together. A quarter is the overlap that reads as one becoming the other.
+     */
+    overlap: 0.28,
+    /**
+     * Where in the timeline the *grip* changes, 0..1.
+     *
+     * The idle the body stands in is a full-body pose, and it has to change on
+     * the beat the new weapon appears rather than on either end of the swap —
+     * too early and the hands are shaped round a gun that is not there yet, too
+     * late and they are still holding a blade that has gone.
+     */
+    handover: 0.55,
+    /** The glowing edge of the mask, and how wide that band is (0..1 of the burn). */
+    edgeColor: '#7fd4ff',
+    edgeEmissive: 4.5,
+    edgeWidth: 0.05,
+    /**
+     * Features per metre in the mask noise.
+     *
+     * Far higher than the same control on a body, and it has to be: a blade is
+     * three centimetres across, so anything under about fifty features per
+     * metre puts less than two blobs across its width and the mask reads as the
+     * weapon being cut in half rather than as it coming apart.
+     */
+    detail: 70.0,
+    /**
+     * How much the burn runs along the piece rather than being pure static —
+     * 1 is a clean line travelling from the grip to the tip, 0 is noise eating
+     * it from everywhere at once.
+     */
+    rise: 0.55
+  },
+
+  /* ------------------------------------------------------------------ */
   /* Locomotion                                                          */
   /* ------------------------------------------------------------------ */
   /**
@@ -114,6 +167,13 @@ export const settings = {
     idleThreshold: 0.08,
     /** Fraction of the blend gap left after 1s (lower = snappier clip changes). */
     blendRate: 0.0005,
+    /**
+     * The same, for the cross-fade between the two idles — the plain stand and
+     * the rifle one. Faster than the gait blend on purpose: this one is
+     * answering a weapon appearing in the hand, and it has to be finished by
+     * the time the burn is.
+     */
+    stanceRate: 0.00002,
     /**
      * Trim on the stride rate, per gait — a multiplier on top of the
      * speed/clip-speed division, blended between the two the same way the

@@ -21,14 +21,18 @@ export class CharacterScreenUI {
    * @param {object} config
    * @param {import('../equipment/EquipmentCatalog.js').EquipmentItem[]} config.items
    * @param {import('../equipment/EquipmentManager.js').EquipmentManager} config.equipment
+   * @param {import('../equipment/WeaponSwitch.js').WeaponSwitch} config.weapons
+   *   which weapon is drawn — read for the bar's Weapon group and for the card
+   *   chips, never held
    * @param {() => {selected: ?string, gizmoMode: string, preview: string}} config.state
    *   the screen's live mode, read on every refresh — the panel mirrors it and
    *   never holds a second copy
    * @param {object} config.hooks every action the screen can take
    */
-  constructor({ items, equipment, state, hooks }) {
+  constructor({ items, equipment, weapons, state, hooks }) {
     this.items = items;
     this.equipment = equipment;
+    this.weapons = weapons;
     this.state = state;
     this.hooks = hooks;
     this.selectedId = null;
@@ -71,6 +75,22 @@ export class CharacterScreenUI {
       none: button('Off', () => this.hooks.onGizmo('none'))
     };
     bar.append(group('Gizmo', Object.values(this.gizmoButtons)));
+
+    // One button per weapon, and the drawn one is lit. It is the same swap the
+    // world runs on `1` — the burn plays out on the set as well, which is the
+    // point of putting it here: this is where the exchange is *looked* at, and
+    // it is also how the piece under the gizmo is chosen (see
+    // `CharacterScreen#_onWeaponChange`).
+    this.weaponButtons = new Map();
+    for (const item of this.weapons?.items ?? []) {
+      this.weaponButtons.set(
+        item.id,
+        button(item.name, () => this.hooks.onWeapon(item.id))
+      );
+    }
+    if (this.weaponButtons.size) {
+      bar.append(group('Weapon', [...this.weaponButtons.values()]));
+    }
 
     this.previewButtons = {
       // First in the row because it is the one to tune against: the body holds
@@ -298,7 +318,15 @@ export class CharacterScreenUI {
         // The body of the card equips; the state chip alone selects, so a
         // tuned piece is never taken off by a mis-click on its own row. A locked
         // piece is already on and stays on, so its whole card just selects.
-        if (event.target === state || this.equipment.isLocked(item.id)) {
+        //
+        // A weapon is the exception in one direction: it is always on, so there
+        // is nothing to toggle, and the useful thing a click on a stowed one
+        // can mean is "draw this". Selecting follows from that (the screen
+        // moves the inspector onto whatever comes into the hand), so the two
+        // readings do not compete.
+        if (this.weapons?.has(item.id) && !this.weapons.isDrawn(item.id)) {
+          this.hooks.onWeapon(item.id);
+        } else if (event.target === state || this.equipment.isLocked(item.id)) {
           this.hooks.onSelect(item.id);
         } else {
           this.hooks.onToggleItem(item.id);
@@ -342,17 +370,30 @@ export class CharacterScreenUI {
       const equipped = this.equipment.isEquipped(id);
       const pending = this.equipment.isPending(id);
       const locked = this.equipment.isLocked(id);
+      // A weapon is always equipped, so "equipped" says nothing about it. What
+      // the card has to say is whether it is the one in the hand.
+      const weapon = this.weapons?.has(id) === true;
+      const drawn = weapon && this.weapons.isDrawn(id);
       card.classList.toggle('is-equipped', equipped);
       card.classList.toggle('is-selected', this.selectedId === id);
       card.classList.toggle('is-pending', pending);
       card.classList.toggle('is-locked', locked);
+      card.classList.toggle('is-stowed', weapon && !drawn && !pending);
       chip.textContent = pending
         ? 'loading…'
-        : locked && equipped
-          ? 'locked'
-          : equipped
-            ? 'equipped'
-            : 'equip';
+        : weapon
+          ? drawn
+            ? 'drawn'
+            : 'stowed'
+          : locked && equipped
+            ? 'locked'
+            : equipped
+              ? 'equipped'
+              : 'equip';
+    }
+
+    for (const [id, node] of this.weaponButtons ?? []) {
+      node.classList.toggle('is-active', this.weapons?.isDrawn(id) === true);
     }
 
     const slot = this.selectedId ? this.equipment.get(this.selectedId) : null;

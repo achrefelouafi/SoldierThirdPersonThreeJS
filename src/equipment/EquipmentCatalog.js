@@ -18,6 +18,12 @@
  * @property {string} name what the screen calls it
  * @property {string} category a `CATEGORIES` id
  * @property {string} url a .glb, relative to the site root
+ * @property {string} [node] name of the sub-tree to lift out of that file, for
+ *   an export that carries more than the piece — the rest is disposed on the
+ *   way past. Omit and the whole scene is the item.
+ * @property {string} [stance] marks the item a *weapon* and names the idle the
+ *   body holds while it is drawn (see `animation/Locomotion.js`). Exactly one
+ *   weapon is ever out; `equipment/WeaponSwitch.js` owns which.
  * @property {string} [note] one line of flavour for the item card
  * @property {boolean} [equipByDefault] worn on load, with no saved loadout involved
  * @property {boolean} [locked] cannot be taken off — the screen offers no way to
@@ -40,8 +46,8 @@ export const CATEGORIES = [
   {
     id: 'weapons',
     label: 'Weapons',
-    /** Held gear. Everything here will eventually answer to combat state. */
-    hint: 'Held gear — the category future combat work hangs off.'
+    /** Held gear. One of these is drawn at a time — see `stance` below. */
+    hint: 'Held gear — one is drawn at a time, and 1 swaps between them.'
   },
   {
     id: 'attachments',
@@ -58,11 +64,41 @@ export const ITEMS = [
     category: 'weapons',
     url: './models/weapons/sword.glb',
     note: 'Blade runs down +Z from the guard.',
+    // The idle the body stands in while this is the weapon that is out — the
+    // plain one, which is the stand every other clip was authored against.
+    stance: 'sword',
     // Worn from the first frame — the character is never seen unarmed, and the
     // screen cannot take it off: combat and its VFX assume the blade is there.
     equipByDefault: true,
     locked: true,
     defaults: {
+      bone: 'RightHand',
+      position: [-0.051, 0.102, 0.052],
+      rotation: [-168.3, 84, -0.8],
+      scale: 1
+    }
+  },
+  {
+    id: 'rifle',
+    name: 'Rifle',
+    category: 'weapons',
+    url: './models/weapons/Rifle.glb',
+    // The export is a whole authoring scene — a copy of the body and of the
+    // katana are in there beside the gun. This is the only branch that is the
+    // rifle; `EquipmentLibrary` lifts it out and disposes the rest, so the
+    // other two never reach the GPU.
+    node: 'Sketchfab_model',
+    note: 'Barrel runs down +Z. The ring on it turns.',
+    stance: 'rifle',
+    // Both weapons ride the skeleton at all times and the switch decides which
+    // one is *visible*, so the gun is mounted from the first frame exactly as
+    // the blade is — that is what lets either be tuned on the set at any point.
+    equipByDefault: true,
+    locked: true,
+    defaults: {
+      // A starting point, not a measurement: the grip is roughly where the
+      // katana's is because the two share a hand and an axis. Tune it on the
+      // set and paste the result back (the screen's "Copy defaults").
       bone: 'RightHand',
       position: [-0.051, 0.102, 0.052],
       rotation: [-168.3, 84, -0.8],
@@ -144,3 +180,23 @@ export function defaultItems() {
 export function itemsInCategory(categoryId) {
   return ITEMS.filter((item) => item.category === categoryId);
 }
+
+/**
+ * The weapons, in catalog order.
+ *
+ * A weapon is any item that declares a `stance` — which is the same statement
+ * as "only one of these is out at a time", because the stance is the idle the
+ * body holds and the body has one pose. Nothing else in the project decides
+ * what counts as a weapon.
+ */
+export function weaponItems() {
+  return ITEMS.filter((item) => typeof item.stance === 'string');
+}
+
+/** Whether this id names a weapon. */
+export function isWeapon(id) {
+  return typeof findItem(id)?.stance === 'string';
+}
+
+/** The one that is drawn before anyone has said otherwise: the first listed. */
+export const DEFAULT_WEAPON_ID = weaponItems()[0]?.id ?? null;

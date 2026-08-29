@@ -52,6 +52,26 @@ export const ABILITY_ICONS = {
       `<circle cx="3" cy="19.2" r="1.5" fill="currentColor" stroke="none"/>`
   ),
 
+  // A blade and a barrel crossed, with the swap arrows turning between them.
+  // Neither weapon is drawn whole: at 24px a katana and a rifle differ by their
+  // *ends*, so the glyph is a hilt and a stock meeting at the centre and the
+  // two silhouettes reading off each other.
+  weapon: stroke(
+    // The blade, up to the right, with its guard.
+    `<path d="M4.6 19.4 15.4 8.6" stroke-width="1.9"/>` +
+      `<path d="M2.8 21.2 4.6 19.4" stroke-width="2.4"/>` +
+      `<path d="M3.4 17.6 6.4 20.6" stroke-width="1.4"/>` +
+      // The rifle, down to the right: barrel, then the drop of the grip.
+      `<path d="M8.6 5.4h11.8" stroke-width="1.9"/>` +
+      `<path d="M20.4 5.4v2.2" stroke-width="1.4"/>` +
+      `<path d="M12.6 5.6 11 9.4" stroke-width="1.6"/>` +
+      // And the exchange, turning between the two.
+      `<path d="M17.4 13.2a3.6 3.6 0 0 1-5.2 3" stroke-width="1.3" opacity="0.72"/>` +
+      `<path d="M12.9 18.3 11.6 16 14 15.1" stroke-width="1.3" opacity="0.72"/>` +
+      `<path d="M14.2 19.6a3.6 3.6 0 0 0 5.2-3" stroke-width="1.3" opacity="0.72"/>` +
+      `<path d="M18.7 14.5 20 16.8 17.6 17.7" stroke-width="1.3" opacity="0.72"/>`
+  ),
+
   // A body on the stand, with a slot open either side of it — the studio is
   // where gear goes on, so the glyph is the fitting rather than the armour.
   customize: stroke(

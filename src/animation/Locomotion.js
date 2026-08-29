@@ -10,6 +10,17 @@ import { damp } from '../utils/math.js';
  * stopped and another started, so a stop-start-stop input can never catch the
  * body mid-fade with nothing playing.
  *
+ * ## Two idles
+ *
+ * The body stands differently depending on what is in its hands, so `idle` is
+ * really a pair — the plain stand and the one holding a rifle — cross-faded by
+ * `setStance`. They are blended rather than switched for the same reason the
+ * gaits are: the weapon swap is a burn with a beat of its own, and a pose that
+ * cut on that beat would land a frame ahead of the thing it is reacting to.
+ * Only the *standing* pose changes; the walk and the run are shared, because
+ * the gaits are what carries the body and re-authoring those per weapon is a
+ * different job from this one.
+ *
  * Two things keep the feet on the ground:
  *
  *  - **Phase lock.** Walk is the master cycle and run is slaved to its
@@ -24,7 +35,9 @@ import { damp } from '../utils/math.js';
 export class Locomotion {
   /**
    * @param {import('three').AnimationMixer} mixer
-   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip}} clips
+   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip, idleRifle?: import('three').AnimationClip}} clips
+   *   `idleRifle` is optional: without it every stance resolves to the plain
+   *   stand, which is the right thing for a rig whose export failed to load
    * @param {{weight: number, takeover: number}[]} overrides full-body moves that
    *   mask the gait while they hold the pose — the two jumps and the kick. Only
    *   those two numbers are read, so anything that resolves them qualifies.
@@ -34,6 +47,7 @@ export class Locomotion {
     this.overrides = overrides.filter(Boolean);
 
     this.idle = this._action(clips.idle);
+    this.idleRifle = this._action(clips.idleRifle);
     this.walk = this._action(clips.walk);
     this.run = this._action(clips.run);
 
@@ -41,6 +55,9 @@ export class Locomotion {
     this.speed = 0;
     /** Smoothed weights, so a shove on the input does not pop the pose. */
     this.weights = { idle: 1, walk: 0, run: 0 };
+    /** How far the stand is toward the rifle idle, 0..1, and where it is going. */
+    this.stance = 0;
+    this._stanceTarget = 0;
 
     if (this.idle) this.idle.weight = 1;
   }
@@ -61,6 +78,26 @@ export class Locomotion {
   }
 
   /**
+   * Which stand the body holds, named by the weapon that is drawn.
+   *
+   * Anything that is not `'rifle'` — including no weapon at all — is the plain
+   * stand, so a catalog entry with a stance nobody has authored a clip for
+   * degrades to the pose every other clip was made against rather than to
+   * nothing. Called by `equipment/WeaponSwitch.js` on the beat the new weapon
+   * appears, not at either end of the swap.
+   *
+   * @param {string|null} name a catalog item's `stance`
+   * @param {{immediate?: boolean}} [options] `immediate` skips the cross-fade.
+   *   For the boot path: the body has not been seen yet, and easing out of a
+   *   pose nobody watched it hold is half a second of it settling into the
+   *   stand it should already have been in.
+   */
+  setStance(name, { immediate = false } = {}) {
+    this._stanceTarget = name === 'rifle' && this.idleRifle ? 1 : 0;
+    if (immediate) this.stance = this._stanceTarget;
+  }
+
+  /**
    * Park the blend on the first frame of the idle, now rather than over a fade.
    *
    * `update` damps every weight so a shove on the input cannot pop the pose,
@@ -73,13 +110,24 @@ export class Locomotion {
   rest() {
     this.speed = 0;
     this.weights = { idle: 1, walk: 0, run: 0 };
-    for (const key of ['idle', 'walk', 'run']) {
+    // The stance snaps here for the same reason the weights do: a stand held
+    // half way between two idles is a pose nobody authored, and gear judged
+    // against it is judged against nothing.
+    this.stance = this._stanceTarget;
+    for (const key of ['idle', 'idleRifle', 'walk', 'run']) {
       const action = this[key];
       if (!action) continue;
-      action.setEffectiveWeight(this.weights[key]);
+      action.setEffectiveWeight(this._weightFor(key));
       action.setEffectiveTimeScale(1);
       action.time = 0;
     }
+  }
+
+  /** One action's share of the blend, with the stand split between its two clips. */
+  _weightFor(key, mask = 1) {
+    if (key === 'idle') return this.weights.idle * mask * (1 - this.stance);
+    if (key === 'idleRifle') return this.weights.idle * mask * this.stance;
+    return this.weights[key] * mask;
   }
 
   /**
@@ -125,8 +173,15 @@ export class Locomotion {
 
     for (const key of ['idle', 'walk', 'run']) {
       this.weights[key] = damp(this.weights[key], target[key], config.blendRate, dt);
-      this[key]?.setEffectiveWeight(this.weights[key] * mask[key]);
     }
+    // The stand is one weight split across two clips, on the same curve as
+    // everything else — see `setStance`.
+    this.stance = damp(this.stance, this._stanceTarget, config.stanceRate, dt);
+
+    this.idle?.setEffectiveWeight(this._weightFor('idle', mask.idle));
+    this.idleRifle?.setEffectiveWeight(this._weightFor('idleRifle', mask.idle));
+    this.walk?.setEffectiveWeight(this._weightFor('walk', mask.walk));
+    this.run?.setEffectiveWeight(this._weightFor('run', mask.run));
 
     // The pace the blended pose travels at when played at rate 1 — the *clips'*
     // authored speeds, not the designer's `walkSpeed`/`runSpeed`. Dividing the

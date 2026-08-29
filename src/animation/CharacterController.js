@@ -31,6 +31,10 @@ const CHARACTER_URL = './models/tpose.fbx';
  */
 const ANIMATION_URLS = {
   idle: './animations/Idle.fbx',
+  // The second stand: the same body, holding a rifle. Which of the two is on
+  // the pose is decided by what is drawn — see `Locomotion#setStance` and
+  // `equipment/WeaponSwitch.js`.
+  idleRifle: './animations/IdleRifle.fbx',
   walk: './animations/Walk.fbx',
   run: './animations/Run.fbx',
   bigJump: './animations/BigJump.fbx',
@@ -294,6 +298,7 @@ export class CharacterController {
       this.mixer,
       {
         idle: this.clips.get('idle'),
+        idleRifle: this.clips.get('idleRifle'),
         walk: this.clips.get('walk'),
         run: this.clips.get('run')
       },
@@ -768,6 +773,21 @@ export class CharacterController {
 
     this.mixer.timeScale = settings.global.animationSpeed;
     this.mixer.update(dt);
+  }
+
+  /**
+   * Which stand the body holds, named by the weapon that is drawn.
+   *
+   * A pass-through to the blend, so nothing outside this file has to know that
+   * the two idles are two clips — `equipment/WeaponSwitch.js` says "rifle" and
+   * this is where that becomes an animation. Safe before `load()`: there is no
+   * blend to tell yet, and `Locomotion` reads the stance every frame anyway.
+   *
+   * @param {string|null} name a catalog item's `stance`
+   * @param {{immediate?: boolean}} [options] passed straight through
+   */
+  setStance(name, options) {
+    this.locomotion?.setStance(name, options);
   }
 
   get position() {

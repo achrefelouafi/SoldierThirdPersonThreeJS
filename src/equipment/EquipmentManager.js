@@ -1,4 +1,4 @@
-import { Group, MathUtils, Matrix4, Vector3 } from 'three';
+import { AnimationMixer, Group, LoopRepeat, MathUtils, Matrix4, Vector3 } from 'three';
 import {
   defaultItems,
   defaultPlacement,
@@ -48,6 +48,14 @@ const _bodyInverse = new Matrix4();
  * the mirror is a reflection wrapped around the mount (`_reflectMount`), not a
  * copy beside it, so the placement, the gizmo and the joint it rides all go on
  * meaning exactly what they did.
+ *
+ * ## Gear that moves on its own
+ *
+ * An item whose export ships clips gets a mixer of its own, looping everything
+ * the file carried, advanced from `update`. It is per *slot* rather than
+ * shared with the character's: this animation belongs to the object, not to the
+ * body it is hanging off, and it has to go on turning through a pose the
+ * character's mixer is being denied time for.
  */
 export class EquipmentManager {
   /**
@@ -154,8 +162,22 @@ export class EquipmentManager {
       model,
       mount,
       bone: null,
-      placement: placement ? clonePlacement(placement) : defaultPlacement(item)
+      placement: placement ? clonePlacement(placement) : defaultPlacement(item),
+      /** Its own animation, if the export shipped any. @type {AnimationMixer|null} */
+      mixer: null
     };
+
+    // Looping from the frame it goes on, and never stopped: the pieces that
+    // carry animation carry *idling* animation — a ring that turns, a light
+    // that pulses — and there is no state in which one of them is meant to be
+    // holding still.
+    const clips = this.library.animations(id);
+    if (clips.length) {
+      slot.mixer = new AnimationMixer(model);
+      for (const clip of clips) {
+        slot.mixer.clipAction(clip).setLoop(LoopRepeat, Infinity).play();
+      }
+    }
 
     this.slots.set(id, slot);
     this._attach(slot);
@@ -177,6 +199,8 @@ export class EquipmentManager {
     if (!slot) return;
 
     slot.mount.parent?.remove(slot.mount);
+    slot.mixer?.stopAllAction();
+    slot.mixer = null;
     // Geometry and materials belong to the library's template; only the clone's
     // scene nodes go, and those are plain objects the GC can have.
     this.slots.delete(id);
@@ -436,12 +460,18 @@ export class EquipmentManager {
    * does nothing at all on a frame where nobody touched `targetHeight`. The
    * mirrors are the exception: they track a pose that moves every frame, so they
    * are recomputed whenever any are up — and skipped outright when none are.
+   *
+   * @param {number} [dt] seconds, for gear that animates itself. Hand it 0 to
+   *   hold those poses while the mounts are still kept honest.
    */
-  update() {
+  update(dt = 0) {
     const scale = this.character.modelScale;
     if (scale !== this._modelScale) {
       this._modelScale = scale;
       for (const slot of this.slots.values()) this._syncMountScale(slot);
+    }
+    if (dt > 0) {
+      for (const slot of this.slots.values()) slot.mixer?.update(dt);
     }
     this._updateMirrors();
   }

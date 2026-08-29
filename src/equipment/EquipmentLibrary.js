@@ -1,5 +1,6 @@
-import { DoubleSide, SRGBColorSpace } from 'three';
+import { DoubleSide, Group, SRGBColorSpace } from 'three';
 import { LAYER } from '../core/Layers.js';
+import { disposeObject } from '../utils/dispose.js';
 
 /**
  * Loads equipment models, once each, and dresses them out of the character's
@@ -19,6 +20,17 @@ import { LAYER } from '../core/Layers.js';
  * against `MaterialLibrary` by name first and the export's own is released; what
  * ends up on screen is literally the same material instance the body wears.
  *
+ * **Some exports carry more than the item.** A catalog entry may name the one
+ * branch of the file that is actually the piece (`item.node`); everything
+ * beside it is disposed here rather than being carried around invisible. The
+ * branch keeps its own transform and is wrapped in a fresh group, so the
+ * placement the manager writes is always written to something with an identity
+ * transform under it and the export's own orientation survives.
+ *
+ * **Animation comes with it.** A GLB that ships clips keeps them: they are
+ * bound by node name, and cloning preserves names, so one template's clips play
+ * on every instance made from it. `EquipmentManager` gives each slot the mixer.
+ *
  * @see EquipmentManager for what happens to a loaded model afterwards.
  */
 export class EquipmentLibrary {
@@ -35,6 +47,8 @@ export class EquipmentLibrary {
     this._loading = new Map();
     /** item id → prepared template. Instances are clones of these. */
     this._templates = new Map();
+    /** item id → the clips its export shipped, if any. */
+    this._animations = new Map();
     /** palette material → its double-sided twin, made once and shared. */
     this._twoSided = new Map();
   }
@@ -62,6 +76,10 @@ export class EquipmentLibrary {
         await this.assets.settled();
         const template = this._prepare(gltf.scene, item);
         this._templates.set(item.id, template);
+        // Kept whole. A clip that names a node the extraction dropped simply
+        // binds to nothing, which is what a mixer already does with a missing
+        // target — filtering here would be the same answer for more code.
+        if (gltf.animations?.length) this._animations.set(item.id, gltf.animations);
         return template;
       })
       .catch((error) => {
@@ -96,6 +114,18 @@ export class EquipmentLibrary {
   }
 
   /**
+   * The clips an item's export shipped, or an empty list.
+   *
+   * Shared, not cloned: `AnimationMixer` never writes to a clip, and two
+   * instances of one item playing the same loop is exactly right.
+   *
+   * @returns {import('three').AnimationClip[]}
+   */
+  animations(id) {
+    return this._animations.get(id) ?? [];
+  }
+
+  /**
    * A fresh instance of an already-loaded item.
    *
    * `Object3D#clone` shares geometry and materials with the template, so a
@@ -119,7 +149,8 @@ export class EquipmentLibrary {
    * @param {import('three').Object3D} root
    * @param {import('./EquipmentCatalog.js').EquipmentItem} item
    */
-  _prepare(root, item) {
+  _prepare(scene, item) {
+    const root = this._extract(scene, item);
     root.name = `Equipment:${item.id}`;
 
     /** Materials the palette displaced, and the textures still in use after. */
@@ -176,6 +207,43 @@ export class EquipmentLibrary {
   }
 
   /**
+   * The branch of an export that is actually the item, wrapped for mounting.
+   *
+   * An entry with no `node` keeps the whole scene; one that names a node keeps
+   * that node and disposes every mesh left behind, which is the difference
+   * between loading a rifle and loading a rifle plus a spare body and a spare
+   * katana nobody will ever see.
+   *
+   * Either way the result is a fresh group with an identity transform. The
+   * manager writes the placement onto the object it is handed, so a branch that
+   * carries an orientation of its own — and the one here does — has to sit
+   * *inside* something rather than be the thing written to.
+   *
+   * @param {import('three').Object3D} scene the loaded glTF scene
+   * @param {import('./EquipmentCatalog.js').EquipmentItem} item
+   * @returns {import('three').Object3D}
+   */
+  _extract(scene, item) {
+    if (!item.node) return scene;
+
+    const wanted = scene.getObjectByName(item.node);
+    if (!wanted) {
+      console.warn(
+        `[EquipmentLibrary] "${item.id}" names a node "${item.node}" its export does not have — ` +
+          'keeping the whole scene.'
+      );
+      return scene;
+    }
+
+    wanted.parent?.remove(wanted);
+    disposeObject(scene);
+
+    const holder = new Group();
+    holder.add(wanted);
+    return holder;
+  }
+
+  /**
    * The palette material an item should wear, rendered from both sides.
    *
    * Equipment is modelled as open shells — cloth, straps, blade fullers — so
@@ -227,6 +295,7 @@ export class EquipmentLibrary {
     for (const twin of this._twoSided.values()) twin.dispose();
     this._twoSided.clear();
     this._templates.clear();
+    this._animations.clear();
     this._loading.clear();
   }
 }

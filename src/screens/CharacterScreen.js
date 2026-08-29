@@ -16,6 +16,7 @@ import { StudioStage } from '../world/StudioStage.js';
 import { StudioCamera } from './StudioCamera.js';
 import { EquipmentLibrary } from '../equipment/EquipmentLibrary.js';
 import { EquipmentManager } from '../equipment/EquipmentManager.js';
+import { WeaponSwitch } from '../equipment/WeaponSwitch.js';
 import { ITEMS } from '../equipment/EquipmentCatalog.js';
 import { CharacterScreenUI } from '../ui/CharacterScreenUI.js';
 import { LAYER } from '../core/Layers.js';
@@ -49,6 +50,10 @@ const ENTRY_FACING = 1.25;
  *  - `stage` — the lit set (see `world/StudioStage.js`)
  *  - `camera` — a free orbit that pans and dollies (see `StudioCamera.js`)
  *  - `equipment` — what is worn and where (see `equipment/EquipmentManager.js`)
+ *  - `weapons` — which of them is drawn, and the burn between them (see
+ *    `equipment/WeaponSwitch.js`). It lives here rather than in the app for the
+ *    same reason the loadout does: both stages show the same body, and the
+ *    weapon it is holding is a property of the body, not of a scene.
  *  - a gizmo, a bone marker and a skeleton overlay: the three things that turn
  *    "type an offset and squint" into direct manipulation
  *  - the panel, which is plain DOM (see `ui/CharacterScreenUI.js`)
@@ -91,6 +96,9 @@ export class CharacterScreen {
     this.equipment = new EquipmentManager(character, this.library, {
       onChange: (event) => this._onEquipmentChange(event)
     });
+    this.weapons = new WeaponSwitch(character, this.equipment, {
+      onChange: (id) => this._onWeaponChange(id)
+    });
 
     this.selected = null;
     this.preview = 'idle';
@@ -106,6 +114,7 @@ export class CharacterScreen {
     this.ui = new CharacterScreenUI({
       items: ITEMS,
       equipment: this.equipment,
+      weapons: this.weapons,
       state: () => ({
         selected: this.selected,
         gizmoMode: this.gizmoMode,
@@ -228,6 +237,11 @@ export class CharacterScreen {
       this.raycaster.setFromCamera(_pointer, this.camera.camera);
 
       for (const [id, slot] of this.equipment.slots) {
+        // A stowed weapon is still mounted and still has geometry where it
+        // would be — three's raycaster does not consult `visible`, so the
+        // check is here or a click on an empty fist selects a gun nobody can
+        // see.
+        if (!slot.model.visible) continue;
         if (this.raycaster.intersectObject(slot.model, true).length) {
           this.select(id);
           return;
@@ -281,6 +295,14 @@ export class CharacterScreen {
     this.character.resetPlacement();
     this.character.position.set(0, 0, 0);
     settings.character.facing = ENTRY_FACING;
+
+    // A weapon that is stowed is invisible, and a gizmo over an invisible thing
+    // is a set of handles in mid-air. Arriving with one selected — which is
+    // what happens after a swap out in the world — moves the selection to the
+    // one actually in the hand.
+    if (this.weapons.has(this.selected) && !this.weapons.isDrawn(this.selected)) {
+      this.selected = this.weapons.current;
+    }
 
     this.stage.scene.add(this.character.root);
     this._ensureSkeleton();
@@ -346,8 +368,15 @@ export class CharacterScreen {
     // nothing in it advances. Everything else here is still given `raw`: the
     // turntable above, the camera and the set all keep moving around a body
     // that does not.
-    this.character.update(this.preview === 'stopped' ? 0 : dt);
-    this.equipment.update();
+    const beat = this.preview === 'stopped' ? 0 : dt;
+    this.character.update(beat);
+    // Gear that animates itself is held by `stopped` exactly as the body is —
+    // a frozen frame with a ring still turning in it is not a frozen frame.
+    this.equipment.update(beat);
+    // The swap is not: it is an action the panel has just been used to take,
+    // and it plays out on the *real* clock so it still reads while the body is
+    // being held still to be looked at.
+    this.weapons.update(raw);
 
     this.camera.update(raw);
     this.stage.update(this.camera.camera, this.elapsed);
@@ -464,6 +493,21 @@ export class CharacterScreen {
 
   /* ------------------------------------------------------------------ */
 
+  /**
+   * Follow the drawn weapon with the inspector.
+   *
+   * Switching is how a weapon is *chosen* on this screen, so it is also how one
+   * is picked to be tuned: the piece that has just come into the hand is the
+   * piece the gizmo and the number boxes are now about. Anything else would
+   * leave the panel editing something that is no longer on screen.
+   */
+  _onWeaponChange(id) {
+    // `select` refreshes the panel itself; off the screen there is nothing to
+    // select and only the cards' "drawn"/"stowed" chips have to catch up.
+    if (this.active) this.select(id);
+    else this.ui.refresh();
+  }
+
   _onEquipmentChange(event) {
     if (event.type === 'equipped') {
       this.selected = event.id;
@@ -497,6 +541,7 @@ export class CharacterScreen {
         await this.renderer.gl.compileAsync(this.stage.scene, this.camera.camera);
       },
       onSelect: (id) => this.select(id),
+      onWeapon: (id) => this.weapons.select(id),
       onBone: (id, bone) => this.equipment.setBone(id, bone),
       onPlacement: (id, patch) => this.equipment.setPlacement(id, patch),
       onMirror: (id, axis, on) => this.equipment.setMirror(id, axis, on),
@@ -563,6 +608,7 @@ export class CharacterScreen {
     this.canvas.removeEventListener('pointerup', this._onPointerUp);
     this.transform.detach();
     this.transform.dispose();
+    this.weapons.dispose();
     this.equipment.dispose();
     this.library.dispose();
     this.assets.dispose();

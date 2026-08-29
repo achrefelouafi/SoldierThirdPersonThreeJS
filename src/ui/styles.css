@@ -405,6 +405,28 @@ body {
   animation: cs-pulse 1.1s ease-in-out infinite;
 }
 
+/*
+ * A weapon that is on the body but not in the hand.
+ *
+ * Both weapons are always equipped — only one is drawn (see
+ * `equipment/WeaponSwitch.js`) — so the accent bar that means "equipped" would
+ * be on both of them and say nothing. The stowed one gives it up and dims, and
+ * clicking the card draws it.
+ */
+.cs__card.is-stowed {
+  opacity: 0.55;
+}
+
+.cs__card.is-stowed.is-equipped {
+  border-left-color: rgba(127, 212, 255, 0.25);
+}
+
+.cs__card.is-stowed .cs__cardState {
+  color: rgba(220, 232, 247, 0.5);
+  background: transparent;
+  border-color: rgba(220, 232, 247, 0.2);
+}
+
 @keyframes cs-pulse {
   50% {
     opacity: 0.35;
@@ -1023,6 +1045,33 @@ body.cs-open .stats {
 
 .move.is-active .move__icon {
   color: var(--blood-lit);
+}
+
+/* ---- the ones that are also controls ---- */
+
+/*
+ * A chip marked `press` in `config/abilities.js` can be clicked, and the click
+ * means what its key means. The HUD as a whole is `pointer-events: none` so it
+ * never eats a drag meant for the camera underneath it; these get the pointer
+ * back, and only these.
+ */
+.tech.is-pressable,
+.seal.is-pressable,
+.move.is-pressable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.move.is-pressable:hover:not(.is-off) {
+  color: var(--washi);
+  border-bottom-color: rgba(217, 178, 106, 0.5);
+}
+
+.tech.is-pressable:focus-visible,
+.seal.is-pressable:focus-visible,
+.move.is-pressable:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: 2px;
 }
 
 /* ---- off ---- */

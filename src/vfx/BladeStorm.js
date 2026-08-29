@@ -855,7 +855,15 @@ export class BladeStorm {
    * @param {import('three').Material|null} source the weapon's material
    * @param {object} uniforms this blade's own, shared by every material on it
    */
-  _createMaterial(source, uniforms) {
+  _createMaterial(material0, uniforms) {
+    // The weapon on the body wears a dissolve mask (`equipment/WeaponDissolve.js`)
+    // so it can be swapped for the rifle, and that mask's threshold is a
+    // property of *what is in the hand* — not of a blade forged out of its
+    // shape. Cloning through it would give every blade a hidden burn state and
+    // hide the whole volley whenever the katana was stowed, so the forge starts
+    // from the surface underneath it.
+    const source = material0?.undissolved ?? material0;
+
     // `totalEmissiveRadiance` only exists on the lit materials. A weapon wearing
     // something unlit gets the old near-black steel rather than a patch aimed at
     // a chunk that is not in its shader.

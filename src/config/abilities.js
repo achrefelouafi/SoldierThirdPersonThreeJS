@@ -52,6 +52,10 @@ export const CATEGORIES = {
  * @property {string} code the physical `KeyboardEvent.code` behind it
  * @property {string} note one line, for the chip's tooltip
  * @property {boolean} [attack] buffered as an edge and routed to an `Attack`
+ * @property {boolean} [press] the chip is a control as well as a readout — it
+ *   can be clicked, and the click means the same as the key. Only for the ones
+ *   that are a plain switch: anything aimed has to be aimed, and a button
+ *   cannot say where.
  */
 
 /** @type {Ability[]} */
@@ -63,6 +67,18 @@ export const ABILITIES = [
     hotkey: 'Space',
     code: 'Space',
     note: 'A running long jump. At any lesser pace it is a hop instead.'
+  },
+  {
+    id: 'weapon',
+    category: 'movement',
+    // Rewritten each frame with the name of what is actually in the hand, so
+    // the chip is the answer to "what am I holding" as well as the way to
+    // change it — see `ActionHUD#setLabel`.
+    label: 'Katana',
+    hotkey: '1',
+    code: 'Digit1',
+    note: 'Swap the weapon. The one in your hand burns away and the other burns in.',
+    press: true
   },
   {
     id: 'customize',
