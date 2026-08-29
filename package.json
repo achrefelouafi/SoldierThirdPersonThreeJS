@@ -1,0 +1,19 @@
+{
+  "name": "character-equipment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A third-person Three.js template: a rigged samurai on an endless procedural night landscape, with motion-warped melee, summons, flight, ragdoll deaths and an equipment studio.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lil-gui": "^0.21.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "vite": "^8.1.5"
+  }
+}
