@@ -56,7 +56,17 @@ export const settings = {
     maxPolar: 1.62,
     fov: 55,
     targetHeight: 1.3,
-    damping: 0.001
+    damping: 0.001,
+    /**
+     * Radians of view per pixel of mouse, while the pointer is captured.
+     *
+     * The whole stage's, not the rifle's: the pointer is taken by a click and
+     * turns the view whatever is in the hand (`core/PointerLook.js`), so there
+     * is one number for how fast the player turns rather than one per weapon.
+     * What each mode adds on top of it is a *multiplier* — see
+     * `gunplay.camera.adsSensitivity`.
+     */
+    sensitivity: 0.0023
   },
 
   /* ------------------------------------------------------------------ */
@@ -197,9 +207,10 @@ export const settings = {
 
       /** Fraction of the gap left after 1s as the lens moves onto the shoulder. */
       blend: 0.0006,
-      /** Radians of view per pixel of mouse, while the pointer is captured. */
-      sensitivity: 0.0023,
-      /** What that is multiplied by down the sights — a longer lens turns slower. */
+      /**
+       * What `camera.sensitivity` is multiplied by down the sights — a longer
+       * lens turns slower.
+       */
       adsSensitivity: 0.55
     },
 

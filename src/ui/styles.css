@@ -1358,12 +1358,23 @@ body.cs-open .stats {
   }
 }
 
-.reticle__hint {
-  position: absolute;
+/*
+ * The one line that says the pointer is not the game's.
+ *
+ * Under the middle of the screen — where the player is already looking, and
+ * where the reticle sits when there is one — and on screen for exactly as long
+ * as the cursor is free (`core/PointerLook.js`). It belongs to the stage rather
+ * than to the reticle because it is true with any weapon in the hand, and with
+ * none.
+ */
+.look-hint {
+  position: fixed;
   left: 50%;
   top: calc(50% + 2.2rem);
   transform: translateX(-50%);
+  z-index: 4;
   margin: 0;
+  pointer-events: none;
   white-space: nowrap;
   font-size: 0.62rem;
   letter-spacing: 0.18em;
@@ -1374,7 +1385,7 @@ body.cs-open .stats {
   transition: opacity 0.3s ease;
 }
 
-.reticle.has-hint .reticle__hint {
+.look-hint.is-live {
   opacity: 1;
 }
 
@@ -1388,6 +1399,7 @@ body.cs-open .stats {
 body.cs-open .hud,
 body.cs-open .target-keys,
 body.cs-open .reticle,
+body.cs-open .look-hint,
 body.cs-open .hint {
   display: none;
 }

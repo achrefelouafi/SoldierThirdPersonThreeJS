@@ -5,16 +5,22 @@ import { settings } from '../config/settings.js';
 const _world = /* @__PURE__ */ new Vector3();
 const _view = /* @__PURE__ */ new Vector3();
 
+/** The middle of the screen, in NDC — where a captured pointer is looking. */
+const CENTRE = Object.freeze({ x: 0, y: 0 });
+
 /**
  * Pixels a pointer may travel, and milliseconds it may be held, and still count
  * as a click.
  *
- * The left button is already spoken for: `CameraRig` gives it to OrbitControls,
- * so every drag that orbits the camera also ends in a `pointerup` on the
- * canvas. Without this the player could not turn to look at anything without
- * marking whatever the cursor happened to pass over on the way. A click is the
- * button going down and up in the same place, which is exactly what these two
- * numbers say — and it is why the mark is taken on the *up*, not the down.
+ * Both are only in force while the pointer is *free*. With it captured the
+ * left button is the mark's alone and a press is simply a click — see
+ * `_onPointerUp`. With it given back, though, the left button is already spoken
+ * for: `CameraRig` gives it to OrbitControls, so every drag that orbits the
+ * camera also ends in a `pointerup` on the canvas. Without these the player
+ * could not turn to look at anything without marking whatever the cursor
+ * happened to pass over on the way. A click is the button going down and up in
+ * the same place, which is exactly what these two numbers say — and it is why
+ * the mark is taken on the *up*, not the down.
  */
 const CLICK_SLOP = 6;
 const CLICK_TIME = 400;
@@ -34,11 +40,16 @@ const CLICK_TIME = 400;
  * (`aim` is a fraction of the screen's *height*), so this is a look rather than
  * a pixel hunt — you turn toward someone and they light up.
  *
- * The aim point is the cursor, and it starts at the centre of the screen. Those
- * are the same gesture with an orbit camera: the pointer is what turns the
- * view, so before it has moved the centre of the frame is where the player is
- * looking, and after it has moved it is under their hand. Nothing has to be
- * explained to make that work.
+ * The aim point is the middle of the screen while the pointer is captured —
+ * which on the play stage it ordinarily is (`core/PointerLook.js`). The mouse
+ * turns the view rather than moving a cursor across it, so the middle of the
+ * frame *is* where the player is looking, and marking is simply looking at
+ * someone and clicking.
+ *
+ * With the pointer given back (`Esc`, for a menu) the aim follows the cursor
+ * instead, and the two are the same gesture rather than two: before the cursor
+ * has moved it is already in the middle of the frame, and after it has moved
+ * it is under the player's hand. Nothing has to be explained either way.
  *
  * ## What it owns
  *
@@ -121,8 +132,15 @@ export class TargetMarking {
       const down = this._down;
       this._down = null;
       if (!down || event.button !== 0) return;
-      if (performance.now() - down.at > CLICK_TIME) return;
-      if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > CLICK_SLOP) return;
+      // While the pointer is captured there is no orbit drag to tell a click
+      // apart from, and no cursor to measure one against: `clientX` is frozen
+      // wherever the lock was taken, so the two tests below would pass every
+      // press for no distance and fail a slow one for no reason. A press and a
+      // release is a click.
+      if (document.pointerLockElement !== this.domElement) {
+        if (performance.now() - down.at > CLICK_TIME) return;
+        if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > CLICK_SLOP) return;
+      }
       this._clicked = true;
     };
     // The pointer leaving the canvas mid-drag is an orbit, not a click.
@@ -224,7 +242,11 @@ export class TargetMarking {
    */
   _aim(player, config) {
     const camera = this.camera;
-    const pointer = this._pointer;
+    // The middle of the screen while the pointer is ours, the cursor while it
+    // is not — see the note on the aim above. Decided here rather than written
+    // into `_pointer`, so the cursor's last place survives the lock and is
+    // still where the aim resumes from when it is given back.
+    const pointer = document.pointerLockElement === this.domElement ? CENTRE : this._pointer;
     const aspect = camera.aspect || 1;
     const range = Math.max(0, config.range);
 
@@ -273,7 +295,13 @@ export class TargetMarking {
     return best;
   }
 
-  /** Canvas pixels → NDC, against the element's own box rather than the window. */
+  /**
+   * Canvas pixels → NDC, against the element's own box rather than the window.
+   *
+   * Left running while the pointer is captured even though `clientX` is frozen
+   * then: what it holds is where the cursor will be *found* when the pointer is
+   * given back, and the aim ignores it in the meantime (`_aim`).
+   */
   _trackPointer(event) {
     const rect = this.domElement.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;

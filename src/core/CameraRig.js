@@ -53,6 +53,23 @@ export class CameraRig {
     this.anchor = new Vector3(0, 0, 0);
 
     /**
+     * The two things that can stand the orbit drag down, held apart.
+     *
+     * `parked` is the studio: another camera is on screen and this rig is not
+     * being looked through at all, so the wheel is dead too. `pointerLocked`
+     * is the play stage's ordinary state — the mouse is turning the view
+     * through `look` instead of dragging it, so OrbitControls must not also be
+     * reading it, but the wheel is still the player's zoom.
+     *
+     * Kept as two flags rather than as one `controls.enabled` because they are
+     * released by different things and either one alone must hold: coming back
+     * from the studio with the pointer still captured must not hand the orbit
+     * back to a drag nobody is making.
+     */
+    this.parked = false;
+    this.pointerLocked = false;
+
+    /**
      * Impact shake: how much is left of it, and where it put the lens last
      * frame.
      *
@@ -101,7 +118,7 @@ export class CameraRig {
     /**
      * Mouse-look, buffered.
      *
-     * The pointer is captured while the gun is out (`combat/Gunplay.js`), and
+     * The pointer is captured on the play stage (`core/PointerLook.js`), and
      * the deltas arrive on their own events rather than on frames. They are
      * accumulated here and spent inside `update`, where the aim offset has
      * already been taken off — turning the orbit while that offset was still
@@ -144,11 +161,42 @@ export class CameraRig {
     window.addEventListener('pointerdown', this._onPointerDownCapture, true);
   }
 
+  /**
+   * Park the rig, or bring it back.
+   *
+   * The studio's own camera is on screen and this one is not being looked
+   * through, so neither the drag nor the wheel means anything here.
+   *
+   * @param {boolean} on
+   */
+  park(on) {
+    this.parked = on;
+    this._syncControls();
+  }
+
+  /**
+   * The pointer has been captured, or given back.
+   *
+   * @param {boolean} on
+   */
+  setPointerLocked(on) {
+    this.pointerLocked = on;
+    this._syncControls();
+  }
+
+  /** Either flag alone stands the orbit drag down. */
+  _syncControls() {
+    this.controls.enabled = !this.parked && !this.pointerLocked;
+  }
+
   /** Wheel zoom. Multiplicative, so each notch feels the same at any distance. */
   _onWheel(event) {
     // The character screen parks this rig and takes the pointer; a wheel meant
     // for its own camera must not also dolly the one nobody is looking through.
-    if (!this.controls.enabled) return;
+    // Read off `parked` rather than off `controls.enabled`, which is also down
+    // whenever the pointer is captured — and the zoom is the player's in that
+    // state, not the drag's.
+    if (this.parked) return;
     event.preventDefault();
 
     const cam = settings.camera;
@@ -211,8 +259,9 @@ export class CameraRig {
    *
    * The rig's own way of being pointed, for when the pointer is captured and
    * OrbitControls has nothing to read (a locked pointer reports no movement in
-   * page coordinates at all). It is buffered rather than applied — see
-   * `_lookYaw`.
+   * page coordinates at all) — which is why the drag is stood down for as long
+   * as the lock lasts, see `setPointerLocked`. It is buffered rather than
+   * applied — see `_lookYaw`.
    */
   look(yaw, pitch) {
     this._lookYaw += yaw;

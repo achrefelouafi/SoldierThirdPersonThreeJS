@@ -37,11 +37,9 @@ export class Crosshair {
       <div class="reticle__mark">
         <i></i><i></i><i></i><i></i>
       </div>
-      <p class="reticle__hint"></p>
     `;
 
     this.mark = this.element.querySelector('.reticle__mark');
-    this.hintText = this.element.querySelector('.reticle__hint');
 
     /** Seconds left of the hit mark, and whether it was a kill. */
     this._mark = 0;
@@ -51,7 +49,6 @@ export class Crosshair {
     this._hot = null;
     this._blocked = null;
     this._gap = -1;
-    this._hint = null;
 
     parent.appendChild(this.element);
   }
@@ -115,14 +112,6 @@ export class Crosshair {
     this.mark.classList.remove('is-hit');
     void this.mark.offsetWidth; // force the animation to begin again
     this.mark.classList.add('is-hit');
-  }
-
-  /** One line under the reticle, or null for none. */
-  setHint(text) {
-    if (text === this._hint) return;
-    this._hint = text;
-    this.hintText.textContent = text ?? '';
-    this.element.classList.toggle('has-hint', Boolean(text));
   }
 
   /** @param {number} dt real seconds — a hit mark does not slow with the world */

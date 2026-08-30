@@ -68,22 +68,24 @@ const _corner = /* @__PURE__ */ new Box3();
  *
  * ## The pointer
  *
- * The pointer is captured on the first click, because a reticle in the middle
- * of the screen and a cursor that has to be dragged to turn the view are two
- * different games. While it is captured the mouse turns the rig directly
- * (`CameraRig#look`), the left button fires and the right one sights. Both
- * down together is the ordinary case rather than the odd one, which is why the
- * buttons are read as a mask instead of off the event that changed them — see
- * `_syncButtons`. Escape gives the pointer back, and anything that needs the
- * cursor again — the studio, an ability being aimed by clicking on bodies —
- * takes it back through `blocked`.
+ * The pointer belongs to the stage, not to the gun: it is captured on the
+ * first click and turns the view whatever is in the hand
+ * (`core/PointerLook.js`), and `Escape` gives it back for a menu. What is the
+ * gun's is only what the buttons then *mean* — the left one fires, the right
+ * one sights, the middle one crosses the shoulder. Both of the first two down
+ * together is the ordinary case rather than the odd one, which is why they are
+ * read as a mask instead of off the event that changed them — see
+ * `_syncButtons`.
+ *
+ * Nothing here answers while the pointer is free. The press that takes it is
+ * spent on taking it, and the mode waits: a click that both focuses the window
+ * and empties a magazine is how a player loses one to an alt-tab.
  */
 export class Gunplay {
   /**
    * @param {object} options
    * @param {import('three').PerspectiveCamera} options.camera
    * @param {import('../core/CameraRig.js').CameraRig} options.rig
-   * @param {HTMLElement} options.domElement the canvas — where the pointer is read
    * @param {import('../animation/CharacterController.js').CharacterController} options.character
    * @param {import('../animation/ThirdPersonController.js').ThirdPersonController} options.controller
    * @param {import('./EnemyManager.js').EnemyManager} options.enemies
@@ -93,34 +95,37 @@ export class Gunplay {
    *   character screen is built and this does.
    * @param {() => (import('../equipment/EquipmentManager.js').EquipmentManager|null)} options.equipment
    *   where the gun itself is, for the muzzle
+   * @param {import('../core/PointerLook.js').PointerLook} options.look who has
+   *   the pointer. Read, never taken: the mode fires off a pointer the stage
+   *   captured rather than capturing one of its own.
    * @param {() => boolean} [options.blocked] whether something else has the
-   *   pointer or the body — the studio, a marked ability, flight
+   *   body — the studio, a marked ability, flight
    * @param {(point: Vector3, direction: Vector3, count: number, speed: number) => void} [options.onBlood]
    * @param {(seconds: number, scale: number) => void} [options.onHitStop]
    */
   constructor({
     camera,
     rig,
-    domElement,
     character,
     controller,
     enemies,
     terrain = null,
     weapons,
     equipment,
+    look,
     blocked = () => false,
     onBlood = null,
     onHitStop = null
   }) {
     this.camera = camera;
     this.rig = rig;
-    this.domElement = domElement;
     this.character = character;
     this.controller = controller;
     this.enemies = enemies;
     this.terrain = terrain;
     this.weapons = weapons;
     this.equipment = equipment;
+    this.look = look;
     this.blocked = blocked;
     this.onBlood = onBlood;
     this.onHitStop = onHitStop;
@@ -161,8 +166,6 @@ export class Gunplay {
     this._pressed = false;
     /** Which buttons were down at the last pointer event, as a `buttons` mask. */
     this._buttons = 0;
-    /** Whether the pointer is ours. */
-    this.locked = false;
 
     /** The rifle model the muzzle was last measured on, and where it came out. */
     this._muzzleModel = null;
@@ -232,6 +235,23 @@ export class Gunplay {
     return this.controller.speed <= settings.locomotion.idleThreshold;
   }
 
+  /** Whether the pointer is ours. The stage's answer, not this file's. */
+  get locked() {
+    return this.look?.locked === true;
+  }
+
+  /**
+   * Whether the sights are actually up — the mode live and the right button
+   * held.
+   *
+   * The one thing outside this file that has to know: the look is slowed while
+   * a longer lens is on the eye (`core/PointerLook.js`), and the slowing is
+   * the rig's, not the gun's.
+   */
+  get sighting() {
+    return this.active && this._sights;
+  }
+
   /** Which shoulder the lens is over, as the settings hold it. */
   get shoulder() {
     return settings.gunplay.shoulder < 0 ? 'left' : 'right';
@@ -248,9 +268,14 @@ export class Gunplay {
     return this.shoulder;
   }
 
-  /** Give the pointer back — for anything that needs a cursor again. */
-  releaseLook() {
-    if (document.pointerLockElement === this.domElement) document.exitPointerLock();
+  /**
+   * Drop whatever the buttons were saying.
+   *
+   * Not the pointer itself — that is the stage's and outlives any one weapon.
+   * What is dropped is this file's reading of it: a trigger held through a
+   * holster, a sights held through the character screen.
+   */
+  standDown() {
     this._trigger = false;
     this._pressed = false;
     this._sights = false;
@@ -274,6 +299,14 @@ export class Gunplay {
     const live = this.active;
     const sprinting = live && this.sprinting;
 
+    // The pointer being handed back takes the buttons with it, and it is a
+    // *key* that hands it back: no pointer event says it happened, so a
+    // trigger held through `Esc` would go on firing and a right button held
+    // through it would hold the sights up, both until the mouse next moved.
+    // Read every frame rather than off the lock's own event, because that is
+    // the only clock this file has that `Esc` cannot slip past.
+    if (!this.locked) this.standDown();
+
     // The sights go down with the aim: a lens zoomed onto a reticle that is not
     // on the screen is the mode half-left, which reads as a bug rather than as
     // a rule. The shoulder stays, though — dropping the whole rig back to the
@@ -285,8 +318,10 @@ export class Gunplay {
       this.character.rifle?.set(0, 0, 0);
       this.character.rifle?.update(dt);
       this.crosshair.show(false);
-      this.crosshair.setHint(null);
-      if (this.locked) this.releaseLook();
+      // The pointer stays where it is: it is the stage's, and putting the
+      // rifle away is not a reason to hand the player back a cursor they did
+      // not ask for. Only what the buttons were saying goes.
+      this.standDown();
       return;
     }
 
@@ -758,7 +793,6 @@ export class Gunplay {
     // shoot it" are two lights the player would otherwise have to read against
     // each other.
     this.crosshair.setHot(ready && this.onBody);
-    this.crosshair.setHint(this.locked ? null : 'Click to take the sights');
   }
 
   /* ------------------------------------------------------------------ */
@@ -766,8 +800,6 @@ export class Gunplay {
   /* ------------------------------------------------------------------ */
 
   _bind() {
-    const element = this.domElement;
-
     /**
      * Spend a change in which buttons are down.
      *
@@ -803,9 +835,16 @@ export class Gunplay {
       this._buttons = now;
 
       if (!this.active) {
-        this._trigger = false;
-        this._pressed = false;
-        this._sights = false;
+        this.standDown();
+        return;
+      }
+
+      // Nothing the buttons say counts while the pointer is free. That press
+      // is the one taking the pointer back (`core/PointerLook.js`), and the
+      // sights go with the trigger: a right button held to orbit the camera
+      // with a cursor is a drag, not an eye down a scope.
+      if (!this.locked) {
+        this.standDown();
         return;
       }
 
@@ -817,24 +856,6 @@ export class Gunplay {
 
       this._sights = Boolean(now & RIGHT);
 
-      if (document.pointerLockElement !== element) {
-        // The press that takes the pointer is not also a round: it is the one
-        // that focuses the window, and firing on it is how a player loses a
-        // magazine to alt-tabbing back in. Any button takes it, not only the
-        // trigger — raising the sights is as good a way into the mode, and a
-        // player who aims first would otherwise have their next press spent on
-        // the lock instead of on a shot.
-        this._trigger = false;
-        if (down) {
-          const claim = element.requestPointerLock?.();
-          // Chrome hands back a promise and rejects it if the lock is asked
-          // for too soon after one was released. Nothing here has to react —
-          // the hint under the reticle already says the pointer is not ours.
-          claim?.catch?.(() => {});
-        }
-        return;
-      }
-
       if (down & LEFT) {
         this._trigger = true;
         this._pressed = true;
@@ -844,25 +865,12 @@ export class Gunplay {
     };
 
     this._onPointerDown = (event) => {
-      if (this.active) {
-        // While the gun is up, a press on the canvas is the shooter's and
-        // nobody else's — stopped here, in the capture phase, before it can
-        // reach the listeners the canvas itself carries.
-        //
-        // It has to be *every* press rather than only the ones taken while the
-        // pointer is locked. OrbitControls asks for a pointer **capture** on
-        // each button down, and a captured pointer and a locked one are
-        // mutually exclusive: the request throws. That includes the very press
-        // that takes the lock, because the browser may grant it between this
-        // handler and the canvas's. Which costs nothing — a drag that orbits is
-        // what the mouse does when the pointer is *not* captured, and the first
-        // click captures it.
-        if (event.target === element) event.stopPropagation();
-        // Only the event the button actually arrives on can refuse the
-        // browser's own middle-button gesture, so it is refused here rather
-        // than beside the shoulder swap.
-        if (event.button === 1) event.preventDefault();
-      }
+      // Only the event the button actually arrives on can refuse the browser's
+      // own middle-button gesture, so it is refused here rather than beside the
+      // shoulder swap. Nothing else about the press is this file's: the one
+      // that takes the pointer is stopped by `core/PointerLook.js`, and while
+      // the pointer is ours the orbit drag is already stood down.
+      if (this.active && event.button === 1) event.preventDefault();
 
       this._syncButtons(event);
     };
@@ -872,24 +880,10 @@ export class Gunplay {
     };
 
     this._onPointerMove = (event) => {
-      // Before the look, because a chorded press arrives on this event and on
-      // no other: this is where the trigger goes down while the sights are up.
+      // A chorded press arrives on this event and on no other: this is where
+      // the trigger goes down while the sights are already up. The turn the
+      // same move carries is the stage's — see `core/PointerLook.js`.
       this._syncButtons(event);
-
-      if (document.pointerLockElement !== element) return;
-      const config = settings.gunplay.camera;
-      const sensitivity = config.sensitivity * (this._sights ? config.adsSensitivity : 1);
-      // Yaw right for a mouse moving right; pitch up for one moving away. The
-      // rig buffers both and spends them on its own frame — see `CameraRig#look`.
-      this.rig.look(event.movementX * sensitivity, -event.movementY * sensitivity);
-    };
-
-    this._onLockChange = () => {
-      this.locked = document.pointerLockElement === element;
-      if (!this.locked) {
-        this._trigger = false;
-        this._sights = false;
-      }
     };
 
     this._onBlur = () => {
@@ -897,29 +891,25 @@ export class Gunplay {
       // down cannot be reported again until the page has focus, so the mask has
       // to go too or the first press back reads as no press at all.
       this._buttons = 0;
-      this._trigger = false;
-      this._pressed = false;
-      this._sights = false;
+      this.standDown();
     };
 
-    // On the window, in the capture phase, so this runs before the canvas's own
-    // listeners and can keep the press away from them — see the handler.
+    // In the capture phase, so the middle button's own gesture is refused
+    // before anything downstream can act on the press.
     window.addEventListener('pointerdown', this._onPointerDown, true);
     window.addEventListener('pointerup', this._onPointerUp);
     // On the window rather than the canvas: while the pointer is locked every
     // move is targeted at the canvas anyway, and while it is not this is the
     // only way a button released off the canvas is ever seen.
     window.addEventListener('pointermove', this._onPointerMove);
-    document.addEventListener('pointerlockchange', this._onLockChange);
     window.addEventListener('blur', this._onBlur);
   }
 
   dispose() {
-    this.releaseLook();
+    this.standDown();
     window.removeEventListener('pointerdown', this._onPointerDown, true);
     window.removeEventListener('pointerup', this._onPointerUp);
     window.removeEventListener('pointermove', this._onPointerMove);
-    document.removeEventListener('pointerlockchange', this._onLockChange);
     window.removeEventListener('blur', this._onBlur);
 
     this.crosshair.dispose();

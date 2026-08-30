@@ -27,17 +27,26 @@ npm run build
 | `X` | Flight — leave the ground, mark bodies to forge a blade for each, `Space` looses them. |
 | `1` | Swap the weapon. The katana burns away and the rifle burns in, or the other way round. |
 | `Tab` | The equipment studio. |
-| drag · wheel | Orbit · zoom. |
+| click · mouse | Take the pointer, then move the mouse to turn the view. |
+| `Esc` | Give the cursor back, for the editor and the panels. Clicking the canvas takes it again. |
+| wheel | Zoom. |
 | `G` · `F` · `P` | Editor · frame stats · pause. |
+
+The pointer is the stage's, not any one weapon's
+([core/PointerLook.js](src/core/PointerLook.js)): a click captures it and the
+mouse turns the view with a sword in hand, a rifle in hand or nothing at all,
+and `Esc` is the one way back to a cursor from anywhere. The orbit drag is still
+there while the cursor is free, so nothing is lost by pressing it. The one place
+the pointer is never taken is the equipment studio, which is a room you point at
+things in.
 
 **With the rifle drawn**, the whole stage becomes a shooter — the lens steps
 onto a shoulder, a reticle comes up, and the torso points at whatever it is on.
 
 | | |
 | --- | --- |
-| click | Take the sights: the pointer is captured and the mouse turns the view. `Esc` gives it back. |
 | hold left | Fire. Three rounds in the body or one in the head puts someone down. |
-| hold right | Down the sights — closer, narrower, and far more accurate. |
+| hold right | Down the sights — closer, narrower, and far more accurate. The view slows with them. |
 | `H` · middle click | Cross the lens to the other shoulder. |
 
 The moves are also drawn along the bottom of the screen, one panel per kind,
@@ -68,6 +77,7 @@ disagree with any of them.
 | Lighting | [src/world/Environment.js](src/world/Environment.js) | One cool key with a 4096² shadow map re-centred on the character, a cool rim behind it, a deep blue sky fill and a pale bounce off the ground. The key and the rim light **the character only**: three has no per-object light filtering, so the world's own surfaces are patched to drop every directional light instead. The HDR probe is kept only as a dim specular response and is never the visible sky. |
 | Contact shadows | [src/world/ContactShadows.js](src/world/ContactShadows.js) | The tight darkening under the feet the sun's shadow map cannot resolve. |
 | Camera | [src/core/CameraRig.js](src/core/CameraRig.js) | Orbit rig whose distance always resolves back to `settings.camera.distance`, so the wheel and the settings file never disagree. |
+| Pointer | [src/core/PointerLook.js](src/core/PointerLook.js) | Captures the mouse for the whole stage and turns its deltas into view; `Esc` hands the cursor back and stands the orbit drag up in its place. |
 | Post | [src/postprocessing/PostProcessing.js](src/postprocessing/PostProcessing.js) | Bloom → tone map → one grade pass (aberration, contrast/saturation/temperature, vignette, grain). |
 
 ### The terrain, and why the noise is a table
@@ -282,8 +292,11 @@ whole of it: a body is a candidate when it is near the point on screen the playe
 is aiming at, and the nearest wins. The tolerance is a fraction of the screen's
 *height*, so this is a look rather than a pixel hunt.
 
-The aim point is the cursor, and it starts at the centre of the screen — with an
-orbit camera those are the same gesture, so nothing has to be explained.
+The aim point is the middle of the screen while the pointer is captured, which
+on the play stage it ordinarily is — the mouse turns the view rather than moving
+a cursor across it, so marking is looking at someone and clicking. With the
+cursor free it is the cursor instead, and the two are the same gesture rather
+than two: before it has moved it is already in the middle of the frame.
 
 ### Shadows — `V`
 
@@ -541,7 +554,7 @@ paths runs. Neither mode knows about the other.
 
 ```
 src/
-  core/          renderer, clock, orbit rig, input, shared frame uniforms
+  core/          renderer, clock, orbit rig, pointer lock, input, shared frame uniforms
   world/         terrain, floor, sky, moon, air, ground fog, leaves, lighting, the studio set
   animation/     character rig, retargeting, locomotion, jump, flight, attacks
   combat/        enemies, ragdoll, target marking

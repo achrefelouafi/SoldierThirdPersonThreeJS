@@ -1,6 +1,7 @@
 import { Renderer } from './Renderer.js';
 import { Time } from './Time.js';
 import { CameraRig } from './CameraRig.js';
+import { PointerLook } from './PointerLook.js';
 import { Input } from './Input.js';
 import { frame } from './FrameUniforms.js';
 
@@ -71,6 +72,23 @@ export class App {
     this.renderer = new Renderer(canvas);
     this.rig = new CameraRig(canvas);
     this.camera = this.rig.camera;
+
+    // The mouse, for the whole stage: a click takes it and it turns the view,
+    // `Esc` gives it back for a menu (`core/PointerLook.js`). Built here rather
+    // than inside the shooter because it is not the shooter's — the sword, the
+    // summons and an empty hand all look around with it too. The gun's only
+    // share is the sights, which slow the turn while they are up.
+    this.pointerLook = new PointerLook({
+      domElement: canvas,
+      rig: this.rig,
+      // The one place a cursor is wanted: the studio is a room you point at
+      // things in. Every other panel — the editor, the chips along the bottom —
+      // is reached by pressing `Esc` first, which is what makes one key the
+      // answer everywhere.
+      blocked: () => this.inCharacterScreen,
+      sensitivity: () =>
+        this.gunplay?.sighting ? settings.gunplay.camera.adsSensitivity : 1
+    });
 
     this.environment = new Environment(this.renderer, this.camera);
     this.scene = this.environment.scene;
@@ -285,16 +303,18 @@ export class App {
     this.gunplay = new Gunplay({
       camera: this.camera,
       rig: this.rig,
-      domElement: this.canvas,
       character: this.character,
       controller: this.controller,
       enemies: this.enemies,
       terrain: this.terrain,
       weapons: () => this.characterScreen?.weapons ?? null,
       equipment: () => this.characterScreen?.equipment ?? null,
-      // Everything that wants the pointer, the body or the ground back. The gun
-      // does not argue with any of them: it simply stands down, gives the
-      // cursor up and lets the lens come back off the shoulder.
+      look: this.pointerLook,
+      // Everything that wants the body or the ground back. The gun does not
+      // argue with any of them: it simply stands down and lets the lens come
+      // back off the shoulder. The pointer is not in that list any more — it
+      // belongs to the stage, and the marks are taken down the middle of the
+      // screen like everything else.
       blocked: () =>
         this.inCharacterScreen ||
         this.character.flight?.active === true ||
@@ -395,7 +415,12 @@ export class App {
           this.toast.show(this.paused ? 'Paused — the editor still applies' : 'Resumed');
           break;
         case 'KeyG':
-          this.editor.toggle();
+          // A panel full of sliders opened under a captured pointer is a panel
+          // nothing can reach, so opening it hands the cursor back — the same
+          // thing `Esc` does, done for the player at the moment they have
+          // clearly asked for it. Closing it takes nothing: the next click on
+          // the canvas is what says they are done.
+          if (this.editor.toggle()) this.pointerLook.release();
           break;
         case 'KeyF':
           this.stats.toggle();
@@ -478,6 +503,11 @@ export class App {
           break;
         }
         case 'Escape':
+          // The pointer first, whatever else this press means. The browser
+          // gives it back on `Esc` on its own — and swallows the `keydown`
+          // while doing so, which is why this is here for the case where it
+          // does not rather than as the way it usually happens.
+          this.pointerLook.release();
           if (this.inCharacterScreen) {
             this.characterScreen.exit();
           } else if (this.character.flight?.active) {
@@ -690,11 +720,12 @@ export class App {
     this.targetHotkeys.clear();
     this.targetMarkers.clear();
     this.healthBars.clear();
-    // And the pointer, which the gun captures. The studio is a place you point
-    // at things with a cursor, and the frame loop returns before the shooter's
-    // own update would have given it back.
-    this.gunplay.releaseLook();
-    this.rig.controls.enabled = false;
+    // And the pointer, which the stage captures. The studio is a place you
+    // point at things with a cursor, and the frame loop returns before
+    // `PointerLook#update` would have handed it back on its own.
+    this.pointerLook.release();
+    this.gunplay.standDown();
+    this.rig.park(true);
     this.post.setView(screen.stage.scene, screen.camera.camera);
     this.toast.show('Character screen — drag to orbit · right-drag to pan · wheel to zoom');
   }
@@ -977,7 +1008,11 @@ export class App {
 
   /** However the screen was closed, the play stage comes back here. */
   _onScreenExit() {
-    this.rig.controls.enabled = true;
+    // The orbit drag comes back with the stage; the pointer does not, and is
+    // not taken back for the player either. They left this stage with a cursor
+    // and they arrive with one — the next click on the canvas is what says
+    // they are done pointing at things.
+    this.rig.park(false);
     this.post.setView(this.scene, this.camera);
     this.toast.show('Back on the stage');
   }
@@ -1125,6 +1160,10 @@ export class App {
     frame.uCameraNear.value = this.camera.near;
     frame.uCameraFar.value = this.camera.far;
 
+    // Before anything reads the view: whether the pointer is still ours, and
+    // the one line that says how to get it back.
+    this.pointerLook.update();
+
     // Which grade is in force. Everything downstream reads this one object.
     const look = this.inCharacterScreen ? this.characterScreen.postLook : settings.post;
 
@@ -1270,6 +1309,7 @@ export class App {
     this.stop();
     window.removeEventListener('keydown', this._onKeyDown);
     this.input.dispose();
+    this.pointerLook.dispose();
     this.gunplay.dispose();
     this.shadows.dispose();
     this.judgement.dispose();

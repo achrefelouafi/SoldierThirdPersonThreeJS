@@ -66,9 +66,11 @@ export class Editor {
     this.gui.controllersRecursive().forEach((controller) => controller.updateDisplay());
   }
 
+  /** @returns {boolean} whether the panel is now on screen */
   toggle() {
     this._hidden = !this._hidden;
     this.gui.show(!this._hidden);
+    return !this._hidden;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1091,6 +1093,9 @@ export class Editor {
     // through the ground — which is why the default stops just past level.
     R(folder, c, 'maxPolar', 0.2, 2.2, 0.01, 'max pitch');
     R(folder, c, 'damping', 0.001, 0.5, 0.001, 'follow damping');
+    // The captured pointer's turn rate, for every weapon and none — the sights
+    // only multiply it (see the gunplay folder).
+    R(folder, c, 'sensitivity', 0.0004, 0.008, 0.0001, 'mouse (rad/px)');
   }
 
   _buildCharacter() {
@@ -1252,7 +1257,6 @@ export class Editor {
     R(lens, c, 'targetHeight', 0.6, 2.4, 0.01, 'looks at (m)');
     R(lens, c, 'fov', 25, 80, 0.5, 'field of view');
     R(lens, c, 'blend', 0.00001, 0.02, 0.00001, 'comes up over');
-    R(lens, c, 'sensitivity', 0.0004, 0.008, 0.0001, 'mouse (rad/px)');
 
     const sights = lens.addFolder('Down the sights');
     R(sights, c, 'adsOffset', 0, 1.6, 0.01, 'off the axis (m)');
