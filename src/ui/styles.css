@@ -1203,6 +1203,19 @@ body.cs-open .stats {
 }
 
 /*
+ * On the move, so the trigger will not answer (`Gunplay#steady`).
+ *
+ * Down to a third, and no other change at all: the instrument is still there,
+ * still pointed where the gun is, and no longer claiming a round would leave if
+ * it were asked for. It rides the same 0.18s the reticle already fades on, so a
+ * single step does not read as a flicker and coming to a halt reads as the gun
+ * coming back up.
+ */
+.reticle.is-live.is-blocked {
+  opacity: 0.34;
+}
+
+/*
  * On a body.
  *
  * Cyan, not the red every other shooter uses — because on this stage the thing

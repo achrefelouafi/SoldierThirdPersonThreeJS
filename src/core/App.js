@@ -28,6 +28,7 @@ import { Judgement } from '../vfx/Judgement.js';
 import { BladeStorm } from '../vfx/BladeStorm.js';
 import { TargetRings } from '../vfx/TargetRings.js';
 import { TargetMarkers } from '../vfx/TargetMarkers.js';
+import { HealthBars } from '../vfx/HealthBars.js';
 import { CharacterScreen } from '../screens/CharacterScreen.js';
 import { findItem } from '../equipment/EquipmentCatalog.js';
 import { LoadingScreen } from '../ui/LoadingScreen.js';
@@ -310,6 +311,13 @@ export class App {
       }
     });
     this.scene.add(this.gunplay.group);
+
+    // What the rifle leaves on screen that no melee blow ever could: a body
+    // shot twice is a body with a question over it, and this is the answer. It
+    // is built after the gun because it is the gun's — it comes up when the
+    // rifle is drawn and fades when it is put away (`vfx/HealthBars.js`).
+    this.healthBars = new HealthBars();
+    this.scene.add(this.healthBars.mesh);
 
     /**
      * Whoever is currently wearing a diamond, gathered once a frame.
@@ -681,6 +689,7 @@ export class App {
     this.targetRings.clear();
     this.targetHotkeys.clear();
     this.targetMarkers.clear();
+    this.healthBars.clear();
     // And the pointer, which the gun captures. The studio is a place you point
     // at things with a cursor, and the frame loop returns before the shooter's
     // own update would have given it back.
@@ -1187,6 +1196,10 @@ export class App {
     // And who the shadows would be sent at. After the bodies for the same
     // reason: a marked body felled this frame drops its mark on this frame.
     this._updateMarks(dt, position);
+    // And what is left of each of them, while the gun is out. After the bodies
+    // for the third time and the same reason: one felled this frame must not
+    // still be wearing a bar on it.
+    this.healthBars.update(dt, this.enemies.enemies, this.gunplay.active, this.camera);
 
     this.environment.setFocus(position.x, position.z, groundY);
     this.environment.update();
@@ -1267,6 +1280,7 @@ export class App {
     this.targetRings.dispose();
     this.targetHotkeys.dispose();
     this.targetMarkers.dispose();
+    this.healthBars.dispose();
     this.enemies.dispose();
     this.blood.dispose();
     this.characterScreen?.dispose();

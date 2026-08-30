@@ -166,12 +166,17 @@ export const settings = {
     /**
      * Which shoulder the lens is over: -1 is the left, +1 the right.
      *
+     * Right by default, which is what a right-handed body wants: the rifle is
+     * carried on that side, so a lens over the left shoulder is looking across
+     * the chest and past the gun rather than down it, and the muzzle sits in
+     * the wrong half of the screen from the reticle it is answering to.
+     *
      * Live, and swapped with `H` or the middle mouse button. It is a number
      * rather than a boolean because it is also the *amount*: the offset is
      * multiplied by it, so crossing between the two sides is one damp on one
      * value rather than a switch with a special case in the middle.
      */
-    shoulder: -1,
+    shoulder: 1,
 
     camera: {
       /** Metres the lens steps off the body's axis, toward `shoulder`. */
@@ -354,6 +359,50 @@ export const settings = {
       gravity: -16.0,
       color: '#ffc98a',
       brightness: 3.0
+    },
+
+    /**
+     * The bar over a body's head — see `vfx/HealthBars.js`.
+     *
+     * It belongs to the gun and to nothing else, which is why it is a block
+     * here rather than under `enemies`: the rifle is the only weapon on the
+     * stage that spends a body's health a piece at a time, so it is the only
+     * one that leaves a question a bar can answer. Bars come up with the rifle
+     * and fade with it.
+     */
+    healthBar: {
+      enabled: true,
+      /** Metres across, and tall — small, because it is a glance, not a readout. */
+      width: 0.46,
+      height: 0.055,
+      /** Metres above the head it floats. */
+      lift: 0.3,
+      /**
+       * Pixels of width it may never fall below.
+       *
+       * A bar sized purely in metres is honest up close and three pixels wide
+       * at forty metres. Past the distance where this takes over the bar simply
+       * stops shrinking, which is the whole difference between a reading and a
+       * speck.
+       */
+      minWidth: 26,
+      /** Metres from the lens a body still wears one. */
+      range: 80,
+      /** Seconds it takes to come up, and to go back out. */
+      fadeIn: 0.12,
+      fadeOut: 0.28,
+
+      /** What is left, the ground behind it, and the frame around it. */
+      color: '#ff2d32',
+      trackColor: '#160709',
+      frameColor: '#04050a',
+      /** How solid those two are — the remaining health itself is always solid. */
+      trackOpacity: 0.5,
+      frameOpacity: 0.72,
+      /** The frame's thickness, as a fraction of the bar's height. */
+      border: 0.15,
+      /** Whether a body nobody has hit yet wears one at all. */
+      onlyWounded: false
     }
   },
 

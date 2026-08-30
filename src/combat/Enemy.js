@@ -221,6 +221,15 @@ export class Enemy {
      * fired more than once, and that is the whole reason this field exists.
      */
     this.health = settings.gunplay.damage.health;
+    /**
+     * What it was worth when it stood up — what the bar over its head divides by.
+     *
+     * Kept beside the health rather than read from the settings each frame,
+     * because the two are only the same number until someone moves the slider:
+     * a body already carrying two rounds would otherwise jump back to a full
+     * bar the moment `health` was raised.
+     */
+    this.maxHealth = this.health;
     /** Seconds left of the flare a round leaves on the surface. */
     this._flinch = 0;
     /** True once the body has been cut, which is what makes it two of them. */

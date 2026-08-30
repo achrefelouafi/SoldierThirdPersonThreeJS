@@ -49,6 +49,7 @@ export class Crosshair {
     /** Diffed state, so an unchanged frame touches nothing. */
     this._shown = null;
     this._hot = null;
+    this._blocked = null;
     this._gap = -1;
     this._hint = null;
 
@@ -79,6 +80,20 @@ export class Crosshair {
     if (gap === this._gap) return;
     this._gap = gap;
     this.element.style.setProperty('--gap', `${gap}px`);
+  }
+
+  /**
+   * Whether the trigger is being held off — the body on the move.
+   *
+   * Dimmed rather than blanked, because the reticle is on its way off the
+   * screen when this comes on — the same step that holds the trigger off takes
+   * the mark with it (see `Gunplay#steady`), and a mark that faded out at full
+   * strength would read as a shot the player still had.
+   */
+  setBlocked(on) {
+    if (this._blocked === on) return;
+    this._blocked = on;
+    this.element.classList.toggle('is-blocked', on);
   }
 
   /** Whether the ray is on a body. */

@@ -38,12 +38,15 @@ const ANIMATION_URLS = {
   idleRifle: './animations/IdleRifle.fbx',
   walk: './animations/Walk.fbx',
   // The second gait, on the same terms as the second stand: the same walk with
-  // a rifle up. Which of the pair is on the legs is decided by what is drawn —
-  // see `Locomotion#setStance`.
-  walkRifle: './animations/RifleWalk.fbx',
+  // the rifle *up* — the pace at which the body is still behind its own sights,
+  // which is the only pace this mode lets it shoot at (see `Gunplay#sprinting`).
+  // Which of the pair is on the legs is decided by what is drawn — see
+  // `Locomotion#setStance`.
+  walkRifle: './animations/WalkRifle.fbx',
   run: './animations/Run.fbx',
-  // And the third twin. With all three in, nothing the body does on the ground
-  // is left to the additive hold layer — see `Locomotion#unposed`.
+  // And the third twin: the sprint, where the gun is carried rather than aimed.
+  // With all three in, nothing the body does on the ground is left to the
+  // additive hold layer — see `Locomotion#unposed`.
   runRifle: './animations/RifleRun.fbx',
   bigJump: './animations/BigJump.fbx',
   hop: './animations/Jump.fbx',

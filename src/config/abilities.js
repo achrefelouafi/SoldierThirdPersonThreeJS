@@ -85,7 +85,7 @@ export const ABILITIES = [
     category: 'movement',
     // Rewritten each frame with the side the lens is actually on, so the chip
     // answers "which shoulder am I over" as well as changing it.
-    label: 'Left shoulder',
+    label: 'Right shoulder',
     hotkey: 'H',
     code: 'KeyH',
     note:

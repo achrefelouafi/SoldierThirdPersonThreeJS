@@ -1313,6 +1313,27 @@ export class Editor {
     R(hurt, d, 'headBlood', 0, 120, 1, 'droplets, head');
     R(hurt, d, 'bloodSpeed', 0.2, 12, 0.1, 'droplet speed (m/s)');
 
+    // The bar over a head, which exists only because the rifle spends health a
+    // piece at a time — see `vfx/HealthBars.js`.
+    const bars = hurt.addFolder('The bar over a head');
+    const b = g.healthBar;
+    bars.add(b, 'enabled').name('bars shown');
+    bars.add(b, 'onlyWounded').name('only once hit');
+    bars.addColor(b, 'color').name('health left');
+    bars.addColor(b, 'trackColor').name('ground behind');
+    bars.addColor(b, 'frameColor').name('frame');
+    R(bars, b, 'width', 0.1, 1.5, 0.01, 'width (m)');
+    R(bars, b, 'height', 0.01, 0.3, 0.005, 'height (m)');
+    R(bars, b, 'lift', 0, 1.2, 0.01, 'above the head (m)');
+    // What keeps a bar readable once the body is a speck.
+    R(bars, b, 'minWidth', 0, 120, 1, 'never under (px)');
+    R(bars, b, 'range', 5, 200, 5, 'shown within (m)');
+    R(bars, b, 'trackOpacity', 0, 1, 0.01, 'ground opacity');
+    R(bars, b, 'frameOpacity', 0, 1, 0.01, 'frame opacity');
+    R(bars, b, 'border', 0, 0.5, 0.01, 'frame thickness');
+    R(bars, b, 'fadeIn', 0.02, 1, 0.01, 'comes up over (s)');
+    R(bars, b, 'fadeOut', 0.02, 2, 0.01, 'fades over (s)');
+
     const boxes = folder.addFolder('Hitboxes');
     const h = g.hitbox;
     // The head is deliberately a shade larger than a head — see `Hitboxes.js`.

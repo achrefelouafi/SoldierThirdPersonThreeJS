@@ -10,6 +10,16 @@ import { Projectiles } from './Projectiles.js';
 /** The middle of the screen, in NDC. The reticle is nailed to it. */
 const CENTRE = /* @__PURE__ */ new Vector2(0, 0);
 
+/**
+ * The bits of `PointerEvent#buttons`: the trigger, the sights, the shoulder.
+ *
+ * The mask rather than `event.button`, because the mouse's buttons are chorded
+ * and this mode holds two of them at once — see `_syncButtons`.
+ */
+const LEFT = 1;
+const RIGHT = 2;
+const MIDDLE = 4;
+
 const _chest = /* @__PURE__ */ new Vector3();
 const _muzzle = /* @__PURE__ */ new Vector3();
 const _barrel = /* @__PURE__ */ new Vector3();
@@ -61,10 +71,12 @@ const _corner = /* @__PURE__ */ new Box3();
  * The pointer is captured on the first click, because a reticle in the middle
  * of the screen and a cursor that has to be dragged to turn the view are two
  * different games. While it is captured the mouse turns the rig directly
- * (`CameraRig#look`), the left button fires and the right one sights. Escape
- * gives the pointer back, and anything that needs the cursor again — the
- * studio, an ability being aimed by clicking on bodies — takes it back through
- * `blocked`.
+ * (`CameraRig#look`), the left button fires and the right one sights. Both
+ * down together is the ordinary case rather than the odd one, which is why the
+ * buttons are read as a mask instead of off the event that changed them — see
+ * `_syncButtons`. Escape gives the pointer back, and anything that needs the
+ * cursor again — the studio, an ability being aimed by clicking on bodies —
+ * takes it back through `blocked`.
  */
 export class Gunplay {
   /**
@@ -147,6 +159,8 @@ export class Gunplay {
      * unforgivable thing a gun can do.
      */
     this._pressed = false;
+    /** Which buttons were down at the last pointer event, as a `buttons` mask. */
+    this._buttons = 0;
     /** Whether the pointer is ours. */
     this.locked = false;
 
@@ -168,6 +182,54 @@ export class Gunplay {
   /** Whether the whole mode is up: the gun is out and nothing else wants the body. */
   get active() {
     return settings.gunplay.enabled && this.drawn && !this.blocked();
+  }
+
+  /**
+   * Whether the body is sprinting: the run modifier down and the legs actually
+   * carrying it somewhere.
+   *
+   * The state that takes the *aim* off the body, not just the shot. Nobody
+   * holds a rifle on a target at a flat run, and the whole mode is built on the
+   * promise that the round goes where the reticle is — so rather than let that
+   * promise quietly get worse, the sprint takes the aim off the body outright:
+   * the torso stops tracking (`animation/RifleAim.js` drops to nothing and
+   * `RifleRun.fbx` carries the pose on its own) and the sights come down. The
+   * trigger is already gone by then, and the reticle with it — both go the
+   * moment the feet do, see `steady` — so what the sprint adds is the pose to
+   * match: a body that has visibly given up on aiming rather than one still
+   * holding a dead gun on a target.
+   *
+   * Read off the *modifier* rather than off the speed alone, because the key is
+   * the intent: a body decelerating out of a sprint has stopped sprinting the
+   * moment shift comes up, and a player who let go to take a shot should not
+   * have to wait out the ramp for their reticle. The speed is only there to
+   * keep a shift held while standing still from disarming a stationary shooter.
+   */
+  get sprinting() {
+    const input = this.controller.input;
+    if (!input?.running) return false;
+    return this.controller.speed > settings.locomotion.idleThreshold;
+  }
+
+  /**
+   * Whether the feet are planted — the body standing still, at either gait.
+   *
+   * The trigger's own condition, and a stricter one than `sprinting`. A round
+   * sent from a walk is sent by a body rising and falling under its own stride,
+   * and this whole mode is built on the promise that the round goes where the
+   * reticle is. So movement is not paid for in spread and left for the player
+   * to discover by missing: walking, running, sprinting, the shot is simply not
+   * offered until they stop. One rule, and the only pace that shoots is none.
+   *
+   * Read off the smoothed speed rather than off the movement keys, because what
+   * disqualifies the shot is the body *travelling*, not the intent to — a
+   * player who lets go of W is still visibly walking for the length of the
+   * ramp. It is the same number the legs go idle on (`animation/Locomotion.js`),
+   * so the trigger comes back on the frame the walk cycle ends, which is the
+   * frame the player is watching for.
+   */
+  get steady() {
+    return this.controller.speed <= settings.locomotion.idleThreshold;
   }
 
   /** Which shoulder the lens is over, as the settings hold it. */
@@ -210,8 +272,13 @@ export class Gunplay {
   aim(dt) {
     const config = settings.gunplay;
     const live = this.active;
+    const sprinting = live && this.sprinting;
 
-    this.rig.setAim(live, live && this._sights);
+    // The sights go down with the aim: a lens zoomed onto a reticle that is not
+    // on the screen is the mode half-left, which reads as a bug rather than as
+    // a rule. The shoulder stays, though — dropping the whole rig back to the
+    // walk camera would swing the view every time the player broke into a run.
+    this.rig.setAim(live, live && this._sights && !sprinting);
 
     if (!live) {
       this.controller.aimYaw = null;
@@ -241,7 +308,11 @@ export class Gunplay {
         const yaw = Math.atan2(_shot.x, _shot.z);
         const delta =
           MathUtils.euclideanModulo(yaw - this.character.facing + Math.PI, Math.PI * 2) - Math.PI;
-        rifle.set(delta, Math.asin(MathUtils.clamp(_shot.y, -1, 1)), 1);
+        // The angles are handed over even at zero weight, so the twist goes on
+        // damping toward the reticle under a pose that is not showing it — and
+        // the torso is already where it belongs the instant the sprint ends,
+        // rather than swinging round from wherever it was left.
+        rifle.set(delta, Math.asin(MathUtils.clamp(_shot.y, -1, 1)), sprinting ? 0 : 1);
       }
       rifle.update(dt);
     }
@@ -437,6 +508,11 @@ export class Gunplay {
     for (const move of this.character.attacks ?? []) {
       if (move.locked) return;
     }
+    // And any pace at all, on the same terms and for the same reason: the gun
+    // is in the hand but the body is not behind it. The press is spent above
+    // rather than buffered, so coming to a halt does not fire the round that
+    // was refused half a second ago — see `steady`.
+    if (!this.steady) return;
 
     // Semi-automatic: the press is spent here rather than held, so the button
     // has to come back up before another round will leave.
@@ -655,16 +731,33 @@ export class Gunplay {
    * spread, drawn.
    */
   _drawReticle(live, raw) {
-    this.crosshair.show(live);
+    // A reticle over a trigger that will not answer is worse than no reticle at
+    // all, so the reticle is on the screen only while the shot is: the feet
+    // decide both. It leaves on the first step — a walk, a run or a sprint, the
+    // rule does not care which — and comes back on the frame the walk cycle
+    // ends, because `steady` reads the same threshold the legs go idle on. One
+    // mark, one meaning: if it is drawn, the round goes where it is.
+    //
+    // It still dims on the way out rather than blinking (`setBlocked`), so the
+    // trigger is visibly lost a beat before the mark is, and the mark is still
+    // aged while it is gone: a hit from the last round belongs to the round,
+    // not to the pose, and must not be found still burning on the way back in.
+    const ready = this.steady;
+    const aiming = live && ready;
+    this.crosshair.show(aiming);
+    this.crosshair.setBlocked(!ready);
     this.crosshair.update(raw);
-    if (!live) return;
+    if (!aiming) return;
 
     const half = MathUtils.degToRad(this.camera.fov) * 0.5;
     const pixels =
       ((window.innerHeight * 0.5) * Math.tan(MathUtils.degToRad(this.spread))) / Math.tan(half);
 
     this.crosshair.setSpread(4 + pixels);
-    this.crosshair.setHot(this.onBody);
+    // Cold while the trigger is held: "that is a body" and "and you cannot
+    // shoot it" are two lights the player would otherwise have to read against
+    // each other.
+    this.crosshair.setHot(ready && this.onBody);
     this.crosshair.setHint(this.locked ? null : 'Click to take the sights');
   }
 
@@ -675,61 +768,114 @@ export class Gunplay {
   _bind() {
     const element = this.domElement;
 
-    this._onPointerDown = (event) => {
-      if (!this.active) return;
+    /**
+     * Spend a change in which buttons are down.
+     *
+     * ## Why the buttons are read as a mask
+     *
+     * The mouse's buttons are **chorded**, and the pointer events say so: a
+     * `pointerdown` is raised only when the first button goes down, and a
+     * `pointerup` only when the last one comes back up. Every press and every
+     * release in between arrives as a `pointermove` carrying a new `buttons`
+     * mask, and as nothing else at all.
+     *
+     * Which is exactly the shape of this mode. The sights are the right button
+     * and the trigger is the left, so the trigger's own press — taken with the
+     * sights already up, which is the moment it matters most — is never a
+     * `pointerdown`. A handler reading `event.button` off the down event is
+     * therefore a gun that cannot fire down its own sights, and the reverse:
+     * the sights cannot come up mid-burst either. So every handler hands its
+     * event here instead and the mask is diffed against the one it left.
+     *
+     * The trigger is taken off the *edge* rather than off the state, because a
+     * semi-automatic gun spends `_trigger` on the round it fires
+     * (`_pullTrigger`) and a mask re-read on every twitch of the mouse would
+     * hand it straight back. The sights are the opposite — pure state, up for
+     * exactly as long as the button is down.
+     *
+     * @param {PointerEvent} event
+     */
+    this._syncButtons = (event) => {
+      const now = event.buttons ?? 0;
+      const down = now & ~this._buttons;
+      // Tracked in every state, live or not: a button held down through the
+      // character screen must not read as a fresh press on the way back out.
+      this._buttons = now;
 
-      // While the gun is up, a press on the canvas is the shooter's and nobody
-      // else's — stopped here, in the capture phase, before it can reach the
-      // listeners the canvas itself carries.
-      //
-      // It has to be *every* press rather than only the ones taken while the
-      // pointer is locked. OrbitControls asks for a pointer **capture** on each
-      // button down, and a captured pointer and a locked one are mutually
-      // exclusive: the request throws. That includes the very press that takes
-      // the lock, because the browser may grant it between this handler and the
-      // canvas's. Which costs nothing — a drag that orbits is what the mouse
-      // does when the pointer is *not* captured, and the first click captures
-      // it.
-      if (event.target === element) event.stopPropagation();
+      if (!this.active) {
+        this._trigger = false;
+        this._pressed = false;
+        this._sights = false;
+        return;
+      }
 
-      if (event.button === 1) {
+      if (down & MIDDLE) {
         // The middle button is free — OrbitControls is given neither of the
         // gestures that would want it (see `core/CameraRig.js`).
-        event.preventDefault();
         this.swapShoulder();
-        return;
       }
 
-      if (event.button === 2) {
-        this._sights = true;
-        return;
-      }
-
-      if (event.button !== 0) return;
+      this._sights = Boolean(now & RIGHT);
 
       if (document.pointerLockElement !== element) {
-        // The click that takes the pointer is not also a round: it is the one
+        // The press that takes the pointer is not also a round: it is the one
         // that focuses the window, and firing on it is how a player loses a
-        // magazine to alt-tabbing back in.
-        const claim = element.requestPointerLock?.();
-        // Chrome hands back a promise and rejects it if the lock is asked for
-        // too soon after one was released. Nothing here has to react — the
-        // hint under the reticle already says the pointer is not ours.
-        claim?.catch?.(() => {});
+        // magazine to alt-tabbing back in. Any button takes it, not only the
+        // trigger — raising the sights is as good a way into the mode, and a
+        // player who aims first would otherwise have their next press spent on
+        // the lock instead of on a shot.
+        this._trigger = false;
+        if (down) {
+          const claim = element.requestPointerLock?.();
+          // Chrome hands back a promise and rejects it if the lock is asked
+          // for too soon after one was released. Nothing here has to react —
+          // the hint under the reticle already says the pointer is not ours.
+          claim?.catch?.(() => {});
+        }
         return;
       }
 
-      this._trigger = true;
-      this._pressed = true;
+      if (down & LEFT) {
+        this._trigger = true;
+        this._pressed = true;
+      } else if (!(now & LEFT)) {
+        this._trigger = false;
+      }
+    };
+
+    this._onPointerDown = (event) => {
+      if (this.active) {
+        // While the gun is up, a press on the canvas is the shooter's and
+        // nobody else's — stopped here, in the capture phase, before it can
+        // reach the listeners the canvas itself carries.
+        //
+        // It has to be *every* press rather than only the ones taken while the
+        // pointer is locked. OrbitControls asks for a pointer **capture** on
+        // each button down, and a captured pointer and a locked one are
+        // mutually exclusive: the request throws. That includes the very press
+        // that takes the lock, because the browser may grant it between this
+        // handler and the canvas's. Which costs nothing — a drag that orbits is
+        // what the mouse does when the pointer is *not* captured, and the first
+        // click captures it.
+        if (event.target === element) event.stopPropagation();
+        // Only the event the button actually arrives on can refuse the
+        // browser's own middle-button gesture, so it is refused here rather
+        // than beside the shoulder swap.
+        if (event.button === 1) event.preventDefault();
+      }
+
+      this._syncButtons(event);
     };
 
     this._onPointerUp = (event) => {
-      if (event.button === 2) this._sights = false;
-      if (event.button !== 0) return;
-      this._trigger = false;
+      this._syncButtons(event);
     };
 
     this._onPointerMove = (event) => {
+      // Before the look, because a chorded press arrives on this event and on
+      // no other: this is where the trigger goes down while the sights are up.
+      this._syncButtons(event);
+
       if (document.pointerLockElement !== element) return;
       const config = settings.gunplay.camera;
       const sensitivity = config.sensitivity * (this._sights ? config.adsSensitivity : 1);
@@ -747,6 +893,10 @@ export class Gunplay {
     };
 
     this._onBlur = () => {
+      // The window going away takes the buttons with it: whatever is physically
+      // down cannot be reported again until the page has focus, so the mask has
+      // to go too or the first press back reads as no press at all.
+      this._buttons = 0;
       this._trigger = false;
       this._pressed = false;
       this._sights = false;
@@ -756,7 +906,10 @@ export class Gunplay {
     // listeners and can keep the press away from them — see the handler.
     window.addEventListener('pointerdown', this._onPointerDown, true);
     window.addEventListener('pointerup', this._onPointerUp);
-    element.addEventListener('pointermove', this._onPointerMove);
+    // On the window rather than the canvas: while the pointer is locked every
+    // move is targeted at the canvas anyway, and while it is not this is the
+    // only way a button released off the canvas is ever seen.
+    window.addEventListener('pointermove', this._onPointerMove);
     document.addEventListener('pointerlockchange', this._onLockChange);
     window.addEventListener('blur', this._onBlur);
   }
@@ -765,7 +918,7 @@ export class Gunplay {
     this.releaseLook();
     window.removeEventListener('pointerdown', this._onPointerDown, true);
     window.removeEventListener('pointerup', this._onPointerUp);
-    this.domElement.removeEventListener('pointermove', this._onPointerMove);
+    window.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerlockchange', this._onLockChange);
     window.removeEventListener('blur', this._onBlur);
 
