@@ -687,8 +687,8 @@ body.cs-open .stats {
  * The moves, along the bottom centre — see `ui/ActionHUD.js`.
  *
  * One panel per category, and each panel is a different object: the techniques
- * are a rack of lacquer plates, the abilities are a seal, and movement is a
- * strip of trim above both. The player should be able to tell which panel they
+ * are a rack of lacquer plates, the abilities and the boons are seals under
+ * headings of their own, and movement is a strip of trim above all of it. The player should be able to tell which panel they
  * are looking at from the corner of an eye, mid-swing, without reading a word
  * of it — that is the whole reason the three do not share a shape.
  *
@@ -881,7 +881,7 @@ body.cs-open .stats {
   filter: drop-shadow(0 0 6px rgba(255, 106, 77, 0.55));
 }
 
-/* ---- abilities: the seal ---- */
+/* ---- abilities and boons: the seals ---- */
 
 /*
  * A mon, not a plate — round where the techniques are square, so the eye never
@@ -889,8 +889,9 @@ body.cs-open .stats {
  * the only motion anywhere in the HUD and therefore reads instantly.
  */
 
-/* The heading sits over the middle of the seal, not over its left edge. */
-.hud__panel--ability .hud__head {
+/* The heading sits over the middle of the seals, not over their left edge. */
+.hud__panel--ability .hud__head,
+.hud__panel--buff .hud__head {
   justify-content: center;
 }
 

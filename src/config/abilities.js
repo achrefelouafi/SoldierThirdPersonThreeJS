@@ -13,9 +13,10 @@
  *
  * `category` is the second contract, and it is a statement about *kind*, not
  * about layout: a technique is something the body does with the sword and the
- * feet, an ability is something rarer that the body alone could not. The HUD
- * gives each kind its own panel and its own shape on screen so the difference
- * is visible before either is read — see `ui/ActionHUD.js`.
+ * feet, an ability is something rarer that the body alone could not, and a buff
+ * is not thrown at anybody at all — it is called down on yourself and carried.
+ * The HUD gives each kind its own panel and its own heading so the difference
+ * is visible before any of it is read — see `ui/ActionHUD.js`.
  */
 
 /**
@@ -42,11 +43,22 @@ export const CATEGORIES = {
   /**
    * The rarer things — asking for something rather than doing it.
    *
-   * Two of them (`swordCombo`, `voidBeam`) are thrown at whoever is in front of
-   * you exactly as a technique is, because what makes a move an ability here is
-   * *what it calls on*, not how it is aimed.
+   * Both of them (`swordCombo`, `voidBeam`) are thrown at whoever is in front
+   * of you exactly as a technique is, because what makes a move an ability here
+   * is *what it calls on*, not how it is aimed.
    */
-  ability: { id: 'ability', label: 'Abilities', kanji: '術', row: 'main' }
+  ability: { id: 'ability', label: 'Abilities', kanji: '術', row: 'main' },
+  /**
+   * The boons: called down on yourself and then carried for a while.
+   *
+   * The other panels are all a thing you do *to* somebody, and these two are
+   * the only moves with nowhere to point them — what they change is the body
+   * throwing them, and they keep changing it for ten seconds after the key is
+   * let go. That is a different kind of move from "a thing that happens now",
+   * so it is a panel of its own: while one is up its chip is a countdown, and a
+   * player scanning for "how long have I got" should be reading one place.
+   */
+  buff: { id: 'buff', label: 'Boons', kanji: '加', row: 'main' }
 };
 
 /**
@@ -171,26 +183,26 @@ export const ABILITIES = [
   },
   {
     id: 'ascendance',
-    category: 'ability',
+    category: 'buff',
     // Rewritten each frame while the boon is up with the seconds left on it,
     // so the chip is the timer as well as the key — see `App#_syncAbilities`.
     label: 'Ascendance',
     // The next cap along from the ones the abilities already hold — B is taken,
     // and this one is on the same row, where the hand finds it without being
-    // told where it is.
+    // told where it is. N and M sit together because the boons do.
     hotkey: 'N',
     code: 'KeyN',
     note:
       'Call the light down on yourself. For ten seconds you move quicker and ' +
-      'everything you land hits harder. The only one that is not aimed at anybody.',
-    // The one aimless ability, and therefore the only one on this panel that a
-    // click can mean: there is nowhere to point it, so there is nothing a chip
-    // would have to be able to say.
+      'everything you land hits harder. Not aimed at anybody — it is a boon.',
+    // Nothing to aim, so a click can mean it: there is nowhere to point it, and
+    // therefore nothing a chip would have to be able to say. Both boons are
+    // pressable for the same reason.
     press: true
   },
   {
     id: 'shadowBoost',
-    category: 'ability',
+    category: 'buff',
     // Rewritten each frame while the boon is up with the seconds left on it,
     // exactly as `ascendance` is — see `App#_syncAbilities`.
     label: 'Shadow Boost',
@@ -200,9 +212,9 @@ export const ABILITIES = [
     code: 'KeyM',
     note:
       'Call the dark up out of the ground under you. For ten seconds everything ' +
-      'you land is ruinous — the other one that is not aimed at anybody.',
-    // The second aimless ability, so the second chip on this panel a click can
-    // mean. Same reason as above: there is nowhere to point it.
+      'you land is ruinous — the other boon, and aimed at nobody either.',
+    // The second boon, so the second chip a click can mean. Same reason as
+    // above: there is nowhere to point it.
     press: true
   }
 ];

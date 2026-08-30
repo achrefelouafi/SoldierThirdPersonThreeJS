@@ -2725,9 +2725,9 @@ export const settings = {
      */
     glow: {
       /** Metres from the middle to where the spill has run out. */
-      radius: 2.4,
+      radius: 3,
       /** Metres off the floor. Enough to beat the depth buffer, not enough to see. */
-      lift: 0.03,
+      lift: 0.025,
       /**
        * Bluer than everything above it, and on purpose.
        *
@@ -2739,15 +2739,15 @@ export const settings = {
        */
       color: '#5a3cff',
       coreColor: '#9a86ff',
-      intensity: 1.4,
+      intensity: 2.35,
       /**
        * How the spill falls off. Low is a wide flat wash; high is a tight bloom
        * with dark floor around it.
        */
-      falloff: 2.2,
+      falloff: 1.4,
       /** How much of the radius the hot middle takes, and how tight it is in it. */
-      core: 0.22,
-      corePower: 2.0,
+      core: 0.32,
+      corePower: 3.35,
       /** Depth and speed of the breath under it. */
       pulse: 0.16,
       pulseSpeed: 2.2,
@@ -2766,11 +2766,11 @@ export const settings = {
      */
     rings: {
       /** Metres the outermost front reaches. Wider than the pool, on purpose. */
-      radius: 3.1,
-      lift: 0.045,
+      radius: 3.8,
+      lift: 0.08,
       color: '#a48cff',
       coreColor: '#f2ecff',
-      intensity: 1.3,
+      intensity: 1,
       /** How many fronts are on the disc at once. */
       rings: 4,
       /**
@@ -2780,10 +2780,10 @@ export const settings = {
        * ground being *held* open rather than as a shockwave, and anything past
        * about 1 turns the aura into a sonar ping.
        */
-      speed: 0.35,
+      speed: -0.39,
       /** Width of the bright band, and the feather on it. */
-      width: 0.035,
-      softness: 0.02,
+      width: 0.038,
+      softness: 0.04,
       /**
        * The bloom either side of the band, and how far into the floor it
        * carries.
@@ -2791,22 +2791,22 @@ export const settings = {
        * Without it the fronts are hairlines. The reference's rings are *lit*:
        * a bright line with light spilling off it into the stone.
        */
-      glow: 0.28,
+      glow: 0.72,
       glowWidth: 0.16,
       /** Depth of the trough behind each front, and how far back it reaches. */
       trough: 0.5,
-      troughWidth: 0.12,
+      troughWidth: 0.145,
       /**
        * How far a front is pushed off a true circle, and how fine that push is.
        *
        * This is the "distortion" of the name. At 0 they are compass circles and
        * the floor reads as a target decal; a very little of it is enough.
        */
-      warp: 0.014,
+      warp: 0,
       warpScale: 4.5,
       warpSpeed: 0.22,
       /** Turns a second of the whole warped field. */
-      spin: -0.05
+      spin: -0.63
     },
 
     /**
@@ -2818,7 +2818,7 @@ export const settings = {
      */
     column: {
       /** Metres of bore at rest. Wide enough for a body to stand in. */
-      radius: 0.45,
+      radius: 0.79,
       /**
        * Metres it reaches up.
        *
@@ -2827,7 +2827,7 @@ export const settings = {
        * from across the field, and one that ends tidily in mid-air at head
        * height reads as a prop rather than as something torn open.
        */
-      height: 9,
+      height: 9.5,
       color: '#8b5cff',
       coreColor: '#f0e8ff',
       /** The tube that darkens the silhouette. Nearly black, and never quite. */
@@ -2840,7 +2840,7 @@ export const settings = {
        * been drawn, and anything near 1 clips the whole shaft to white and
        * takes the profile — the entire effect — with it.
        */
-      intensity: 0.85,
+      intensity: 1.11,
       /**
        * And the half that subtracts: peak opacity of the dark tube at the
        * **silhouette**, where the wall is grazing.
@@ -2850,9 +2850,9 @@ export const settings = {
        * character standing in the middle. It is what gives the shaft an outside
        * as well as an inside.
        */
-      shade: 0.75,
+      shade: 0.2,
       /** How hard the dark is held to that silhouette. Higher is a thinner edge. */
-      shadePower: 2.4,
+      shadePower: 3.05,
       /**
        * The profile through the middle — the length of the eye's ray through
        * the column, which is what makes it read as a volume.
@@ -2860,7 +2860,7 @@ export const settings = {
        * 1 is a flat disc of light and anything past about 3.5 is a thin
        * filament with air around it.
        */
-      corePower: 3.2,
+      corePower: 5.4,
       /**
        * The skin at the silhouette, and deliberately almost nothing.
        *
@@ -2869,14 +2869,14 @@ export const settings = {
        * whatever the core is doing inside it. The dark tube is what defines
        * this shaft's edge; the glow only accents it.
        */
-      rimPower: 3.0,
-      rim: 0.18,
+      rimPower: 3.8,
+      rim: 1.63,
       /** Fraction of the risen height the top dissolves over. */
       topFade: 0.5,
       /** What falls through the core: how much of it, how fine, and how fast. */
       streaks: 0.6,
-      streakScale: 2.0,
-      streakSpeed: 1.5,
+      streakScale: 3.8,
+      streakSpeed: 2.8,
       /**
        * The lightning.
        *
@@ -2885,12 +2885,12 @@ export const settings = {
        * sliding it along. Below about 3 the column reads as flickering; above
        * about 12 the strikes blur into a constant seethe.
        */
-      veins: 0.6,
+      veins: 2.6,
       veinScale: 2.2,
-      veinRate: 7,
-      veinPower: 11,
+      veinRate: 9.6,
+      veinPower: 10.2,
       /** How much of a bolt is split into forks rather than left as one trunk. */
-      veinBranch: 0.55,
+      veinBranch: 0.59,
       /**
        * What the wall between the lens and the body is worth, against the far
        * one.
@@ -2901,10 +2901,10 @@ export const settings = {
        * that can afford it. At 1 the column is at full strength and the player
        * is a smear inside it; at 0 the shaft is hollow from the front.
        */
-      front: 0.5,
+      front: 0.51,
       /** Depth and speed of the breath the standing column sits on. */
-      pulse: 0.16,
-      pulseSpeed: 2.8,
+      pulse: 0.17,
+      pulseSpeed: 4.5,
       /** How much wider the foot is where it comes out of the floor. */
       flare: 1.35,
       flareHeight: 0.07,
@@ -2920,20 +2920,20 @@ export const settings = {
      * for 24.
      */
     wisps: {
-      count: 12,
+      count: 23,
       /** The body of the smoke, and the fringe where the aura shows through it. */
       color: '#453564',
       rimColor: '#7c5cf0',
-      opacity: 0.5,
-      rim: 0.8,
+      opacity: 1,
+      rim: 1.57,
       /** Metres out they stand at the floor, and metres up they climb. */
-      radius: 1.05,
-      height: 4.2,
+      radius: 2.22,
+      height: 5.7,
       /** Turns each one takes over the climb, and the drift of the whole set. */
       curl: 0.75,
-      writhe: 0.3,
+      writhe: -0.39,
       /** Metres of the slow second wander laid over that curl. */
-      sway: 0.42,
+      sway: 0,
       /** Length of one wisp as a fraction of the climb. */
       span: 0.62,
       /** Climbs a second. */
@@ -2946,16 +2946,16 @@ export const settings = {
        * here competes with it and wins, which leaves the aura looking like fog
        * rather than like smoke rising out of something.
        */
-      width: 0.18,
+      width: 0.26,
       spread: 2.2,
       /** What the standing radius has widened to by the top. */
-      topScale: 1.3,
+      topScale: 1.09,
       /** Falloff across the wisp. */
-      softness: 1.3,
+      softness: 2.15,
       /** How fine the tear along one is, how fast it crawls, and how deep it bites. */
-      detail: 3.2,
-      churn: 0.45,
-      erode: 0.45
+      detail: 5.75,
+      churn: 0.68,
+      erode: 0.57
     },
 
     /**
@@ -2965,19 +2965,19 @@ export const settings = {
      * ability needs both or the whole aura reads as one motion.
      */
     swirl: {
-      color: '#4a3a68',
+      color: '#231a32',
       rimColor: '#8b5cf6',
-      opacity: 0.62,
-      rim: 0.9,
+      opacity: 0.95,
+      rim: 1.88,
       /** Puffs a second while the boon is held, and while it is still gathering. */
-      rate: 34,
+      rate: 53,
       gatherRate: 12,
       /** And the handful thrown out on the frame it breaks through. */
       burst: 90,
       /** How far out they are born, as a fraction of the pool's radius. */
       spread: 0.68,
       /** Seconds one lives. */
-      life: 2.4,
+      life: 2.15,
       /**
        * Radians a second at the pool's own radius.
        *
@@ -2994,14 +2994,14 @@ export const settings = {
        */
       reverse: false,
       /** Fraction the orbit widens over a life. Negative draws them inward. */
-      widen: 0.3,
+      widen: 0.28,
       /** Metres a second the field lifts. */
-      rise: 0.5,
+      rise: 3.5,
       /** Metres up a puff may be born, so the swirl is a column and not a sheet. */
-      spawnHeight: 2.4,
+      spawnHeight: 2.1,
       /** Metres across at birth, and how much of that it gains over its life. */
-      size: 0.55,
-      grow: 0.95,
+      size: 0.54,
+      grow: 1.38,
       /**
        * How far a puff is drawn out along its own orbit.
        *
@@ -3011,15 +3011,15 @@ export const settings = {
        * on their own — which is how a real spiral forms and the only way to get
        * one out of billboards. See `vfx/ShadowSwirl.js`.
        */
-      stretch: 2.6,
+      stretch: 2.25,
       /** Metres of wander, and how fast it wanders. */
       wobble: 0.3,
       wobbleSpeed: 1.5,
       /** How fine the fbm across one puff is, and how fast it churns. */
       detail: 1.7,
-      churn: 0.45,
+      churn: 0.76,
       /** The soft inner edge of a puff, and how hard its outline is eaten away. */
-      softness: 0.15,
+      softness: 0.21,
       erode: 0.55
     },
 
@@ -3034,13 +3034,13 @@ export const settings = {
     light: {
       color: '#8b5cff',
       /** While the boon is held. */
-      intensity: 8,
+      intensity: 21.4,
       /** And on the frame it breaks through, decaying with the column's flash. */
-      flash: 26,
+      flash: 43,
       /** Where it hangs, as a fraction of the body's height. */
-      height: 0.6,
-      distance: 10,
-      decay: 1.8
+      height: 1.06,
+      distance: 14.5,
+      decay: 3.2
     }
   },
 

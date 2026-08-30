@@ -468,6 +468,25 @@ export class App {
   }
 
   /**
+   * Refuse a boon that is being thrown out of the air, and say so.
+   *
+   * Both boons come out of the ground the body is standing on — a shaft of
+   * light onto it, a column of dark up through it — so neither has anywhere to
+   * land while the feet are off it. The check lives here rather than in the
+   * two casts because it is the same question asked twice, and a silent
+   * refusal mid-jump reads as a dropped key.
+   *
+   * @returns {boolean} true when the press should be spent on a line of text
+   */
+  _groundedOnly() {
+    const jump = this.character.jump;
+    const hop = this.character.hop;
+    if (!jump?.locked && !hop?.locked) return false;
+    this.toast.show('Not in the air — a boon needs the ground under you');
+    return true;
+  }
+
+  /**
    * Call the light down on yourself.
    *
    * The only cast in the game that asks no question first: there is no body to

@@ -24,8 +24,13 @@ import { createIcon } from './icons.js';
  *    name with the key cut into the corner. Three of them, read as a set: this
  *    is the hand the player is playing from.
  *  - **abilities** — a *mon*: a round seal on a ring, standing apart from the
- *    plates on purpose. There is one for now and the panel is built to take
- *    more without changing shape.
+ *    plates on purpose. Two of them, and the panel takes more without changing
+ *    shape.
+ *  - **boons** — the same seal, in a panel of its own at the end of the row.
+ *    These are the two that are not thrown at anybody: they are called down on
+ *    you and then run for ten seconds, and while one is up its chip counts that
+ *    time down. Drawn as seals because that is what they are — the split from
+ *    the abilities is about *kind*, and the heading is what says it.
  *
  * Three states, and each one says something different:
  *
@@ -191,6 +196,30 @@ export class ActionHUD {
   }
 }
 
+/**
+ * One seal chip: a ring-and-disc *mon* with its name and key.
+ *
+ * @param {import('../config/abilities.js').Ability} ability
+ * @returns {HTMLElement}
+ */
+function seal(ability) {
+  const chip = document.createElement('div');
+  chip.className = 'seal';
+
+  const disc = document.createElement('span');
+  disc.className = 'seal__disc';
+
+  const ring = document.createElement('span');
+  ring.className = 'seal__ring';
+
+  // The key rides the rim of the seal rather than sitting under the name: it
+  // keeps the panel the same height as the plates beside it, and a cap struck
+  // through the edge of a seal is the right thing for it to be.
+  disc.append(ring, createIcon(ability.id, 'seal__icon'), span('seal__key', ability.hotkey));
+  chip.append(disc, span('seal__name', ability.label));
+  return chip;
+}
+
 /** @param {string} className @param {string} text */
 function span(className, text) {
   const element = document.createElement('span');
@@ -222,23 +251,15 @@ const CHIPS = {
   },
 
   /** A seal on a ring, with its name and key stacked under it. */
-  ability(ability) {
-    const chip = document.createElement('div');
-    chip.className = 'seal';
+  ability: seal,
 
-    const disc = document.createElement('span');
-    disc.className = 'seal__disc';
-
-    const ring = document.createElement('span');
-    ring.className = 'seal__ring';
-
-    // The key rides the rim of the seal rather than sitting under the name: it
-    // keeps the panel the same height as the plates beside it, and a cap struck
-    // through the edge of a seal is the right thing for it to be.
-    disc.append(ring, createIcon(ability.id, 'seal__icon'), span('seal__key', ability.hotkey));
-    chip.append(disc, span('seal__name', ability.label));
-    return chip;
-  },
+  /**
+   * The same seal. The boons are a category of their own because they are a
+   * different kind of move, not a different kind of object — what separates
+   * them on screen is the panel and its heading, and a fourth shape invented
+   * for two chips would be noise rather than a distinction.
+   */
+  buff: seal,
 
   /** One thin strip: icon, name, key, all on a line. */
   movement(ability) {
