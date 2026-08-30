@@ -39,13 +39,12 @@ const _matrix = /* @__PURE__ */ new Matrix4();
  *
  * ## How it is drawn
  *
- * The same machine as `vfx/TargetMarkers.js`: one `InstancedMesh` of quads
- * built in *view* space, so every bar faces the lens without a matrix being
- * composed on the CPU, and one instance per body with two attributes — how lit
- * the bar is and how full it is. Depth-tested off and drawn over the markers:
- * a bar behind a fold of ground is still the answer to "how much is left in
- * that one", and losing it there is worse than the small cheat of drawing
- * through.
+ * One `InstancedMesh` of quads built in *view* space, so every bar faces the
+ * lens without a matrix being composed on the CPU, and one instance per body
+ * with two attributes — how lit the bar is and how full it is. Depth-tested off
+ * and drawn over the rest: a bar behind a fold of ground is still the answer to
+ * "how much is left in that one", and losing it there is worse than the small
+ * cheat of drawing through.
  *
  * Unlike the markers it is not purely world-sized. A world-sized bar is honest
  * up close and unreadable at forty metres, so the width has a floor in *pixels*

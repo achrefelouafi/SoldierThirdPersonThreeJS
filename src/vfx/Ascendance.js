@@ -15,9 +15,9 @@ import { SummonSeal } from './SummonSeal.js';
  *
  * ## The one ability that is not aimed at anybody
  *
- * Every other thing on the `術` panel is pointed at a body — two shadows sent
- * at two marks, a fist called down on one, a halo of blades loosed at six. This
- * is the opposite and is the reason it exists: it is cast on *yourself*, it
+ * Every other thing on the `術` panel is pointed at a body — three cuts thrown
+ * at one, a column of void brought up through one. This is the opposite
+ * and is the reason it exists: it is cast on *yourself*, it
  * hits nothing, and what it leaves behind is ten seconds in which everything
  * else in the game is better. So it is the only move in the project whose
  * payload is a *duration* rather than an impact, and the only one whose effect

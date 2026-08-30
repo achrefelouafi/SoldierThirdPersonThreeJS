@@ -127,8 +127,7 @@ export class TargetHotkeys {
       // Behind the lens, rejected in *view* space: `project` divides by a
       // negative w back there and mirrors the point into the frame, so a body
       // behind the camera would otherwise wear its caps in the middle of the
-      // screen. The same test `combat/TargetMarking.js` runs, for the same
-      // reason.
+      // screen.
       _view.copy(_world).applyMatrix4(camera.matrixWorldInverse);
       if (_view.z > -camera.near) {
         entry.row.style.opacity = '0';

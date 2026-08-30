@@ -145,6 +145,21 @@ export class Attack {
   }
 
   /**
+   * How far through its clip the swing is, 0..1.
+   *
+   * The same number `update` reads its own beats and its warp window off, so
+   * anything outside that has to line up with a *moment in the move* — the
+   * dash, in `vfx/ShadowDash.js` — is reading the clock the move is actually
+   * being driven by rather than one of its own. 0 while nothing is playing.
+   */
+  get phase() {
+    const action = this.action;
+    if (!action) return 0;
+    const duration = action.getClip().duration;
+    return duration > 0 ? MathUtils.clamp(action.time / duration, 0, 1) : 1;
+  }
+
+  /**
    * Whether this attack may start right now.
    *
    * The gate is that the body is on the ground and not already swinging

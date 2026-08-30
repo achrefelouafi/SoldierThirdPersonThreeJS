@@ -54,7 +54,8 @@ const GROUND_SEGMENTS = 24;
  *
  * Nothing. It is a mesh and a set of uniforms; where it hangs, how far into the
  * opening it is and when something comes through are all told to it once a
- * frame by `vfx/Judgement.js`. It never allocates after construction.
+ * frame by whoever owns it — `vfx/Ascendance.js`, `vfx/RunicBeam.js`. It
+ * never allocates after construction.
  */
 export class SummonSeal {
   /**
@@ -146,7 +147,7 @@ export class SummonSeal {
   }
 
   /**
-   * @param {object} config `settings.judgement.seal`
+   * @param {object} config `settings.ascendance.seal`
    * @param {object} state
    * @param {number} state.open 0..1, the fraction of the circle drawn
    * @param {number} state.scale 0..1 on the radius, so it can iris out

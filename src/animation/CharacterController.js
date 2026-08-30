@@ -14,7 +14,6 @@ import { LAYER } from '../core/Layers.js';
 import { MaterialLibrary } from '../loaders/MaterialLibrary.js';
 import { disposeObject } from '../utils/dispose.js';
 import { Attack } from './Attack.js';
-import { Flight } from './Flight.js';
 import { Jump } from './Jump.js';
 import { Locomotion } from './Locomotion.js';
 import { RifleAim } from './RifleAim.js';
@@ -57,22 +56,10 @@ const ANIMATION_URLS = {
   runRifle: './animations/RifleRun.fbx',
   bigJump: './animations/BigJump.fbx',
   hop: './animations/Jump.fbx',
-  // Not a player state: the summoned shadows hold this on their mark before
-  // they go hunting (see `vfx/ShadowCharacter.js`). It is retargeted here
-  // because this is where the rig and the retargeter are — the shadows are
-  // clones of this skeleton, so a clip lifted onto it plays on them as well.
-  crouch: './animations/Crouch.fbx',
   // The recoil. Not a state either: it is layered *over* whatever the body is
   // doing as a difference rather than as a pose, so the legs go on walking
   // through a burst — see `animation/RifleAim.js`.
   fireRifle: './animations/FiringRifle.fbx',
-  // The hover. Not a move but a *mode*: `X` puts the body in it and it loops
-  // there until `X` takes it out again — see `animation/Flight.js`.
-  float: './animations/fight animations/floating.fbx',
-  // The touchdown out of it: a one-shot that catches the fall and stands back
-  // up. It belongs to the same mode, and `Flight` times it against the descent
-  // so the impact frame lands on the frame the feet do.
-  land: './animations/fight animations/Landing.fbx',
   // The attacks. Unlike the others these exports carry a mesh as well as the
   // motion — only `animations[0]` is read off each, and the body it arrived with
   // is dropped on the floor of `_retarget`.
@@ -180,8 +167,6 @@ export class CharacterController {
     this.jump = null;
     /** The in-place hop — what space does at any pace short of a run. */
     this.hop = null;
-    /** The hover. A mode rather than a move — see `animation/Flight.js`. */
-    this.flight = null;
     /**
      * Holding a rifle: the layered pose, the recoil and the torso's twist onto
      * the reticle. Built with the clips; driven by `combat/Gunplay.js`.
@@ -362,10 +347,6 @@ export class CharacterController {
       this.voidBeam
     ].filter((move) => move.available);
 
-    // The hover. It masks the gait exactly as the jumps do, and for longer:
-    // there is no walk cycle worth leaving under a body that is six metres up.
-    this.flight = new Flight(this.mixer, this.clips.get('float'), this, this.clips.get('land'));
-
     this.locomotion = new Locomotion(
       this.mixer,
       {
@@ -377,7 +358,7 @@ export class CharacterController {
         run: this.clips.get('run'),
         runRifle: this.clips.get('runRifle')
       },
-      [this.jump, this.hop, this.flight, ...this.attacks]
+      [this.jump, this.hop, ...this.attacks]
     );
 
     // After the blend, and it has to be: the hold layer's weight is the inverse
@@ -899,8 +880,6 @@ export class CharacterController {
     this.jump = null;
     this.hop?.cancel();
     this.hop = null;
-    this.flight?.cancel();
-    this.flight = null;
     this.rifle?.cancel();
     this.rifle = null;
     for (const move of this.attacks) move.cancel();

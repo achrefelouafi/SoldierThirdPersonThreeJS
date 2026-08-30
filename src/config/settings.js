@@ -1177,7 +1177,7 @@ export const settings = {
       spread: 2.25,
       /** How far the inner edge bows in — the crescent's whole silhouette. */
       converge: 0.58,
-      /** How far the arc is bowed back, so it is not a flat card edge-on. */
+      /** How far the tips cup out of the sheet's own plane, so it is not a flat card. */
       bow: 0.24,
       /** How far the veil is dragged back behind the edge, × the radius. */
       tail: 0.62,
@@ -1338,9 +1338,7 @@ export const settings = {
     /**
      * The flash and the shower — `vfx/BladeImpact.js`, reused unchanged.
      *
-     * Every field means what it means on `settings.flight.blades.impact`; this
-     * is a second set of numbers for the same system, tuned bluer and a little
-     * larger. The three multipliers above it are what separate the three
+     * The three multipliers above it are what separate the three
      * moments: a small flash off the steel as a cut leaves, a full one where it
      * lands, and half as much again on the finisher.
      */
@@ -1393,8 +1391,8 @@ export const settings = {
     /**
      * The ground's answer under the finisher — `vfx/ShockRing.js`.
      *
-     * The same system as the judgement's, and every field means what it means
-     * there. Smaller and faster: a sword is not a fist the size of a house.
+     * Small and fast, as a sword's answer should be: the ring is barely wider
+     * than the body it opens under and it is gone inside a second.
      */
     shock: {
       enabled: true,
@@ -1431,6 +1429,99 @@ export const settings = {
       launch: 0.35,
       arrive: 0.8,
       finish: 1.0
+    },
+
+    /**
+     * The dash itself, on the body — `vfx/ShadowDash.js`.
+     *
+     * The one beat of the move where the character *travels*, and the only
+     * moment in the game where it covers ten metres in four tenths of a second.
+     * Nothing on the body said so: the same lit skin that was standing still
+     * arrived standing still somewhere else, and a body that is only ever
+     * *between* two poses reads as a teleport with a smear on it.
+     *
+     * So it is not the same body. From a hair before the dash begins the skin
+     * burns away into a shade of itself — one dark surface and a violet rim,
+     * dressed below — and burns back out of it on the frame the feet land on
+     * the mark. The finisher therefore lands on a
+     * body that is still coming back, which is exactly where it should land —
+     * the blow is what puts the character back in the world.
+     *
+     * ## The window
+     *
+     * Stated against the move's own approach rather than in absolute phases, so
+     * tuning `warpFrom`/`warpAt` carries this with it and cannot leave a lit
+     * body dashing or a shade standing around after it has arrived. `lead` is
+     * how far *before* the approach the burn starts (it has to be finished by
+     * the time the feet leave) and `linger` how far past the arrival the shade
+     * is held before it comes back.
+     *
+     * ## The burn
+     *
+     * The same device as every other dissolve in the project, read in both
+     * directions: a noise field crossed with height up the body, thresholded,
+     * and a line of light riding the front. `rise` is the mix — 0 is static
+     * eating the character, 1 is a clean wipe up it, and between them is the
+     * thing that looks like a body coming apart into shadow. Going dark the
+     * front travels up from the feet; coming back it recedes the same way it
+     * came, which is what makes the two halves read as one exchange rather than
+     * as two effects.
+     */
+    shadowDash: {
+      enabled: true,
+      /**
+       * Clip-normalised time before `warpFrom` the burn starts, and after
+       * `warpAt` the shade is held.
+       *
+       * The lead is roughly the length of `enter` at this move's pace, so the
+       * body is fully shade on the frame it starts moving rather than halfway
+       * through it. The linger is zero: "arrives" and "comes back" are meant to
+       * be the same event.
+       */
+      lead: 0.05,
+      linger: 0.0,
+      /**
+       * Seconds each direction takes, on the *simulation's* clock.
+       *
+       * Not the same number, and they should not be: going is a body leaving in
+       * a hurry and coming back is a body being put together, so the return is
+       * three times as long and runs straight through the finisher's hit-stop —
+       * which slows it, and is most of why the third beat lands as hard as it
+       * does.
+       */
+      enter: 0.09,
+      exit: 0.3,
+      /** Cycles of noise per metre. Higher is finer flakes. */
+      detail: 9.0,
+      /** How much of the threshold is height rather than noise, 0..1. */
+      rise: 0.4,
+      /** Cycles a second the noise field crawls up the body while it is out. */
+      drift: 0.6,
+
+      /**
+       * The dark itself — the summons' own numbers, so the two read as the same
+       * material.
+       */
+      color: '#04050b',
+      roughness: 0.85,
+      metalness: 0.0,
+
+      /** The rim that keeps a black body from reading as a hole in the screen. */
+      fresnel: {
+        color: '#7a4dff',
+        power: 2.4,
+        emissive: 2.2
+      },
+
+      /**
+       * The line of light riding the front, in both directions.
+       *
+       * Brighter and wider than the summons' vanish, because this one has to be
+       * read twice in half a second on a body that is crossing the screen.
+       */
+      edgeColor: '#8f5bff',
+      edgeEmissive: 3.6,
+      edgeWidth: 0.09
     }
   },
 
@@ -1480,8 +1571,7 @@ export const settings = {
    * one has an `enabled` of its own so it can be soloed against the other four.
    * `vfx/RunicBeam.js` is where each is explained:
    *
-   *  1. `seal`   — the runes on the ground. `vfx/SummonSeal.js`, the same
-   *     circle the judgement opens, laid flat instead of hung.
+   *  1. `seal`   — the runes on the ground. `vfx/SummonSeal.js`, laid flat.
    *  2. `beam`   — the column itself, drawn on its axis rather than its rim.
    *  3. `spiral` — the cords wound round it, gold against its violet.
    *  4. `impact` — the burst at its foot. `vfx/BladeImpact.js`, reused.
@@ -1656,10 +1746,8 @@ export const settings = {
     /**
      * 1 · The runes — `vfx/SummonSeal.js`, laid flat on the ground.
      *
-     * Every field but `lift` means exactly what it means on
-     * `settings.judgement.seal`; it is the same circle drawn by the same
-     * shader, and that is deliberate. The two abilities reach into the same
-     * place, and a differently-drawn seal would say they do not.
+     * The same circle the light's own seal is drawn with, on its own numbers —
+     * `lift` is the one field that is this block's alone.
      */
     seal: {
       /** Metres it stands off the floor, so it is not in the ground's z-fight. */
@@ -2200,561 +2288,6 @@ export const settings = {
      * read as facets in silhouette.
      */
     segments: 384
-  },
-
-  /* ------------------------------------------------------------------ */
-  /* Shadow character                                                    */
-  /* ------------------------------------------------------------------ */
-  /**
-   * Two shadows of the character, summoned to hunt for it — see
-   * `vfx/ShadowCharacter.js`. `V` arms the mark; two locks send them out.
-   *
-   * Each one is a full clone of the rig (body, armour, weapon and all). It
-   * steps out of the body carrying the character's own pose, crouches on its
-   * mark for `crouch` seconds, then takes the body it was pointed at: it leaves
-   * the crouch aimed at its mark, runs it down, finishes it with one of the
-   * player's own attacks (`strike.move` — the slide cut, by default) and burns
-   * away. What makes them *shadows* is entirely below: one black surface and a
-   * fresnel rim so the silhouette reads against a dark stage.
-   *
-   * Everything is sampled every frame, so the pair can be re-dressed while they
-   * are out there.
-   */
-  shadowCharacter: {
-    /**
-     * Whether the pair is out. `V` flips this; presets remember it.
-     *
-     * It is cleared by the shadows themselves once the last of them has
-     * dissolved, so `V` is a summon rather than a switch — pressing it again
-     * mid-hunt burns them away early.
-     */
-    active: false,
-
-    /**
-     * Choosing who they are sent at — see `combat/TargetMarking.js` and
-     * `vfx/TargetMarkers.js`.
-     *
-     * `V` arms rather than summons: look at a body and the diamond over its
-     * head lights, left-click and it locks, and the `count`th lock is what
-     * actually sends the pair out — one shadow to each mark, in the order they
-     * were taken. A shadow whose mark is felled before it arrives falls back to
-     * the nearest body standing, so a summon is never spent on a corpse.
-     */
-    marking: {
-      /**
-       * How many bodies are locked before the pair steps out.
-       *
-       * There are two shadows, so two is the whole design. At one the second
-       * shadow picks its own body; there is nothing above two to assign.
-       */
-      count: 2,
-      /** Metres from the player a body may be marked at. */
-      range: 30,
-      /**
-       * How far off the aim a body may be and still be the one meant, as a
-       * fraction of the screen's *height*.
-       *
-       * Deliberately generous: this is a look, not a pixel hunt. Turn it down
-       * for a tight reticle, up until the nearest body to the middle of the
-       * frame is always the one that lights.
-       */
-      aim: 0.22,
-      /** Seconds the arm survives with nothing marked. 0 leaves it up. */
-      timeout: 12,
-
-      /** The diamond itself. */
-      look: {
-        /** Metres across, in the world — so it shrinks with distance. */
-        size: 0.5,
-        /** Metres above the top of the body. */
-        lift: 0.4,
-        /** Under the aim, and once the click has landed. */
-        color: '#8f5bff',
-        lockColor: '#e0d0ff',
-        /** Thickness of the outline and the feather on it, in marker widths. */
-        width: 0.1,
-        softness: 0.06,
-        /** Master on the additive brightness. */
-        intensity: 1.7,
-        /** How much of that a *locked* marker's breath takes off, and how fast. */
-        pulse: 0.35,
-        pulseSpeed: 6.0,
-        /** How far the marker overshoots its size as the lock closes. */
-        pop: 0.5,
-        /** Seconds it takes to come up, and to go out once it is dropped. */
-        fadeIn: 0.09,
-        fadeOut: 0.18
-      }
-    },
-
-    /** Metres to each side of the body — the mark each one steps out onto. */
-    offset: 1.05,
-    /** Metres behind it, so they read as flanking rather than as a row. */
-    back: 0.3,
-    /**
-     * Seconds to walk out of the body onto those marks. The pair starts the
-     * summon standing exactly inside the character, which is what sells them as
-     * its shadow stepping out.
-     */
-    emerge: 0.45,
-    /** Size against the character. A shade under 1 makes them read as lesser. */
-    scale: 1.0,
-
-    /**
-     * Seconds held in the crouch on the mark before the hunt starts.
-     *
-     * The beat the whole summon is built around: two things step out of you,
-     * settle, *choose*, and only then move. Without it the pair reads as
-     * projectiles fired at the nearest body.
-     */
-    crouch: 2.0,
-
-    /** The hunt: from the crouch to the foot landing. */
-    hunt: {
-      /** Ground speed of the run, m/s. Faster than the player's, deliberately. */
-      speed: 4.6,
-      /**
-       * Fraction of the angle gap to the target left after a second of turning.
-       *
-       * The *pose* only. Where the body steps is aimed at the target directly
-       * and never reads this, which is what makes the approach converge no
-       * matter how slowly the shoulders come round — see `_hunt`. Turn it right
-       * down for a shadow that drifts in sideways and squares up late; it will
-       * still arrive.
-       */
-      turnRate: 0.0006,
-      /**
-       * Seconds a shadow will chase before giving up and burning away.
-       *
-       * Insurance rather than design: a target that cannot be reached (across a
-       * ravine, or one that dissolved while being run at) would otherwise leave
-       * a shadow running at it forever.
-       */
-      timeout: 9.0,
-      /**
-       * Metres of slack on where the run hands over to the strike — on top of
-       * the move's own `standoff` and the ground its warp is going to cover
-       * (see `strike.lead`).
-       */
-      slack: 0.12
-    },
-
-    /**
-     * The finisher: which of the player's own attacks a shadow arrives into.
-     *
-     * `move` is a settings key — `crouchSlash` (the slide cut), `slashHit` or
-     * `kick` — and everything about the blow comes from that block: the clip,
-     * its timing, its reach, the force it hands the body and whether the body
-     * comes apart. A shadow throws the player's move, not an imitation of it.
-     *
-     * The slide cut is the default because it is the one the *approach* belongs
-     * to. A shadow is already running when it gets there, and this is the move
-     * that is authored as a run: it drops into the slide, opens the body on the
-     * way past and burns away standing behind it.
-     *
-     * ## Where the run stops
-     *
-     * Not on the animator's mark. The move's warp window (`warpAt`) is frames of
-     * travel, so the run hands over that much ground *short* of the mark and the
-     * warp covers it — otherwise the slide would play on the spot. The distance
-     * is measured out of the clip itself (see `_lunge` in
-     * `vfx/ShadowCharacter.js`), which is why there is no metres control here.
-     */
-    strike: {
-      /** Which attack it throws: 'crouchSlash' | 'slashHit' | 'kick'. */
-      move: 'crouchSlash',
-      /**
-       * The move's travel speed against the run's.
-       *
-       * 1 is seamless: the body covers the approach at exactly the pace it was
-       * chasing at, so there is no hitch where the run becomes the move. Below
-       * it the shadow brakes into the cut, above it the cut is a lunge — either
-       * reads, and both are visible at the hand-over, which is the frame to
-       * watch when tuning this.
-       */
-      lead: 1.0
-    },
-
-    /**
-     * The vanish: the same noise burn the enemies use, in the rim's colour.
-     *
-     * `detail` is the size of the noise against the body (higher = finer
-     * flakes), `rise` how much of the threshold is height rather than noise —
-     * 0 is static eating the model, 1 is a clean wipe up the body, and the
-     * value between them is what looks like burning. `edge` is the line of
-     * light riding the burn front.
-     */
-    dissolve: {
-      time: 0.85,
-      detail: 14.0,
-      rise: 0.35,
-      edgeColor: '#8f5bff',
-      edgeEmissive: 3.4,
-      edgeWidth: 0.06
-    },
-
-    /**
-     * The dark itself.
-     *
-     * Not pure black: a black body under a cool key comes out as a hole in the
-     * screen, and a few points of blue in the shadow is what makes it read as
-     * something standing there rather than as a missing pixel. Roughness and
-     * metalness are the same controls the skin has — turn metalness up for an
-     * oily, reflective shade.
-     */
-    color: '#04050b',
-    roughness: 0.85,
-    metalness: 0.0,
-
-    /**
-     * The rim. Every grazing angle emits, which is what draws the silhouette.
-     *
-     * `power` is how tight the band is (higher = a thinner line hugging the
-     * edge), `emissive` how brightly it burns.
-     */
-    fresnel: {
-      color: '#7a4dff',
-      power: 2.4,
-      emissive: 2.2
-    }
-  },
-
-  /* ------------------------------------------------------------------ */
-  /* Judgement — the fist                                                */
-  /* ------------------------------------------------------------------ */
-  /**
-   * `Q` — mark one body, and something on the other side of the world puts a
-   * fist through it. See `vfx/Judgement.js`.
-   *
-   * The move is six beats and they are all in `beats` below: a seal draws
-   * itself in the air over the marked body, holds while it gathers, a fist
-   * comes down out of it, lands, rests on what is left, and is pulled back up
-   * through the way it came. Nothing here is on a physics clock — every beat is
-   * a number of seconds, because the whole thing is choreography.
-   *
-   * ## The three numbers that decide whether it reads
-   *
-   *  - `height` — how far above the body the seal hangs. It is the length of
-   *    the drop, so it is also how heavy the blow looks. Under about two metres
-   *    the fist has no room to gather speed and the move reads as a stamp.
-   *  - `beats.fall` — how long that drop takes. A quarter of a second is a
-   *    *punch*; half a second is a falling boulder. Both work, and they are
-   *    different moves.
-   *  - `fist.scale` — the size of the thing. At 1.5 the knuckles are wider than
-   *    the body they land on, which is the whole joke.
-   *
-   * ## Why the seal cuts the arm off
-   *
-   * The fist is a forearm ending in a wrist, and the wrist has to go
-   * *somewhere*. It goes into the seal: the material discards every fragment
-   * above the seal's plane and burns a line where it crosses (`fist.birth`), so
-   * the arm is not a floating prop — it is something reaching through a hole.
-   * The arm also stretches to meet that hole however high it is hung, so the
-   * two numbers above can be moved without the illusion coming apart. See the
-   * shader note in `vfx/Judgement.js`.
-   */
-  judgement: {
-    enabled: true,
-
-    /**
-     * Choosing who it lands on — the same aim the shadows are marked with
-     * (`combat/TargetMarking.js`), on its own numbers. One body, always: this
-     * is a single blow, and a second mark would have nothing to send.
-     */
-    marking: {
-      /** One. Held here because the marking code asks for it by name. */
-      count: 1,
-      /** Metres from the player a body may be marked at. */
-      range: 34,
-      /** How far off the aim a body may be, as a fraction of the screen's height. */
-      aim: 0.22,
-      /** Seconds the arm survives with nothing marked. 0 leaves it up. */
-      timeout: 12
-    },
-
-    /**
-     * Metres above the marked body's feet that the seal opens.
-     *
-     * It is worth knowing what this is against: at `fist.scale` 1.6 the arm is
-     * 2.9 m long, and the drop is `height` less `fist.crush` — so at 3.3 the arm
-     * is very nearly exactly long enough to still be in the hole when the
-     * knuckles land, and the vertex stretch has almost nothing to do. Hang it
-     * higher and the forearm is drawn out like taffy to reach; that still works
-     * and still reads, but it is a different, lankier thing.
-     */
-    height: 3.3,
-
-    /**
-     * The choreography, in seconds.
-     *
-     * `fall` is the only one that is about force rather than pacing — see the
-     * note above. The rest are pauses, and pauses are what make a blow land:
-     * `charge` is the beat where the player knows what is coming and cannot
-     * stop it, and `dwell` is the fist sitting on the result.
-     */
-    beats: {
-      /** The seal drawing itself, one full turn of the circle. */
-      open: 0.5,
-      /** Held open, gathering, before anything comes through. */
-      charge: 0.34,
-      /** The drop. Under a third of a second reads as a punch. */
-      fall: 0.24,
-      /** Planted on what it hit. */
-      dwell: 0.55,
-      /** Snatched back up through the seal. */
-      withdraw: 0.42,
-      /** And the circle folding away after it. */
-      close: 0.3
-    },
-
-    /**
-     * The seal itself — a horizontal magic circle, drawn entirely in the
-     * fragment shader (`vfx/SummonSeal.js`). There is no texture here and no
-     * geometry past one quad: every ring, tick, rune and spoke is arithmetic on
-     * the polar coordinate.
-     */
-    seal: {
-      /** Metres from the centre to the outer ring. Comfortably wider than the fist. */
-      radius: 1.6,
-      /** The lines. */
-      color: '#2b5700',
-      /** The hot centre, the drawing head, and the flash the fist comes through. */
-      coreColor: '#039900',
-      /** Master on the additive brightness. */
-      intensity: 1.25,
-      /** Turns a second of the outer band. The inner bands run against it. */
-      spin: 0.03,
-      /** Marks in the tick band, glyphs in the rune band, and long spokes. */
-      ticks: 56,
-      runes: 16,
-      spokes: 13,
-      /** Stroke weight and its feather, both in fractions of the radius. */
-      width: 0.012,
-      softness: 0.01,
-      /** The soft light pooled inside the circle, and how mottled it is. */
-      haze: 0.35,
-      detail: 0.52,
-      /** Depth and speed of the breath the whole thing sits on. */
-      pulse: 0.29,
-      pulseSpeed: 5.0
-    },
-
-    /**
-     * The fist — `models/weapons/fist.glb`, which is a forearm with no colour
-     * map at all and one normal map.
-     *
-     * That absence is what the look is built out of. There is no albedo to
-     * light, so nothing here tries to: the surface is near-black and everything
-     * you actually see is *emitted*. A fresnel draws the silhouette, and the
-     * normal map — the only thing the export knows about the shape — is read
-     * for its relief and used to place the light inside the sculpt, so the
-     * knuckle creases and the seams down the forearm run hot while the flats
-     * stay dark — a lighting model aimed at an export that has nothing but
-     * geometry.
-     */
-    fist: {
-      /** Size against the export. At 1.6 the knuckles are wider than a body. */
-      scale: 1.6,
-      /** Metres above the ground the knuckles stop. What is under them is flat. */
-      crush: 0.3,
-      /** The body of the arm — a deep, unlit green for the light to sit on. */
-      color: '#013208',
-      roughness: 0.44,
-      metalness: 0.3,
-      /**
-       * How hard the normal map is pushed.
-       *
-       * The export ships at 0.3, which is a whisper. This is not only a look
-       * control: the veins below are placed by how far the mapped normal has
-       * been bent off the surface, so turning this down dims them too.
-       */
-      normalScale: 1.1,
-
-      /**
-       * The rim that draws the silhouette against a night sky.
-       *
-       * `power` is doing more work here than it does on the shadows, because
-       * this rim is taken on the *mapped* normal: a low exponent floods the
-       * whole forearm violet and the sculpt disappears into it. Around 3 the
-       * band hugs the outline and breaks along the relief, which is the point.
-       */
-      fresnel: {
-        color: '#008f1d',
-        power: 2.9,
-        emissive: 2.0
-      },
-
-      /**
-       * The light in the sculpt.
-       *
-       * `gain` is the one to reach for: relief is a small number (the angle
-       * between the mapped normal and the surface it sits on), so it has to be
-       * opened right up before it reads. Past about 10 the flats start to light
-       * as well and the fist goes from cracked to glowing.
-       */
-      veins: {
-        color: '#8a52ff',
-        /** What the veins run to as the blow lands — white, and briefly. */
-        hotColor: '#fff0cf',
-        emissive: 2.2,
-        gain: 5.5,
-        sharpness: 1.6,
-        /** Scale and speed of the field crawling up the arm, so it is not static. */
-        scale: 5.5,
-        speed: 0.7,
-        /** How much the crevices darken the surface itself. Cavity, by another name. */
-        cavity: 0.65
-      },
-
-      /** The line of light where the arm passes through the seal's plane. */
-      birth: {
-        color: '#e9dcff',
-        emissive: 3.0,
-        /** Metres below the plane the line fades out over. */
-        width: 0.1
-      },
-
-      /**
-       * How hard the surface blows out on contact, and for how long.
-       *
-       * Weighted almost entirely onto the silhouette in the shader, so this is
-       * really "how far the edges flare". Turned up past about 3 the flat of
-       * the forearm saturates too and the whole arm goes to milk for a fifth of
-       * a second, which reads as a bug rather than as a blow.
-       */
-      flash: 1.0,
-      flashTime: 0.2
-    },
-
-    /**
-     * What the blow does to the body, in the same shape every attack states it
-     * in — so `App#_onStrike` takes this and the kick's block without knowing
-     * which it was handed.
-     *
-     * `lift` is negative, which is the whole difference. Every other move in
-     * the game throws a body up and away; this one drives it *down*, and the
-     * ragdoll weights that by height up the skeleton — so the shoulders are
-     * driven into the ground harder than the feet and the body folds flat under
-     * the knuckles rather than skidding backwards.
-     */
-    force: {
-      /**
-       * Metres from the point of impact a body is still under the knuckles.
-       *
-       * The thing that lands is wider than a body, so this is an area rather
-       * than a target: the mark is always taken, and anyone else standing
-       * inside this radius goes down with it. Roughly half the width of the
-       * fist at `fist.scale` 1.5 — turn it up and the blow clears a crowd.
-       */
-      reach: 1.35,
-      /** Outward, along the blow. Small: there is barely a sideways to this. */
-      impulse: 2.4,
-      /** Down. See above. */
-      lift: -9.5,
-      spin: 1.2,
-      /** The world nearly stops. Longer and harder than any of the melee moves. */
-      hitStop: 0.12,
-      hitStopScale: 0.045,
-      /** Metres the lens is kicked. The heaviest thing that happens on this stage. */
-      shake: 0.45,
-      /** Knuckles do not cut anyone in half. */
-      slices: false
-    },
-
-    /**
-     * The ground's answer: one ring racing out from under the knuckles, and the
-     * cracks it opens on the way — see `vfx/ShockRing.js`. Both lie on the
-     * height field, so they run over a slope instead of cutting into it.
-     */
-    shock: {
-      /** Metres the wave travels before it is spent. */
-      radius: 3.6,
-      /** Seconds it takes to get there. */
-      life: 0.7,
-      /** The wave front and what is left glowing in the cracks behind it. */
-      color: '#0fff13',
-      crackColor: '#3dff5d',
-      intensity: 2.6,
-      /** Thickness of the front, as a fraction of the radius, and its feather. */
-      width: 0.09,
-      softness: 0.12,
-      /** How many cracks, how far out they reach, and how wide they open. */
-      cracks: 11,
-      crackLength: 0.85,
-      crackWidth: 0.02,
-      crackGlow: 1.4,
-      /** Lifted clear of the floor so it never z-fights the terrain. */
-      lift: 0.035
-    },
-
-    /**
-     * The dust and the soil — see `vfx/DustBurst.js`.
-     *
-     * Two populations out of one buffer and one draw: the *dust*, which is
-     * light, slow, huge and grows as it goes, and the *soil*, which is dark,
-     * fast, small and falls back down. Neither glows — this is the only effect
-     * in the ability that is lit rather than emitted, which is exactly why it
-     * sells the impact as something that happened to the ground.
-     */
-    dust: {
-      enabled: true,
-      /** Puffs thrown out in the ring, and clods of soil with them. */
-      puffs: 34,
-      clods: 46,
-      /** Metres a second the ring leaves at, and the scatter on it. */
-      speed: 5.4,
-      spread: 0.35,
-      /** How much of that is upward rather than outward, 0..1. */
-      rise: 0.32,
-      /** Metres from the impact the ring is born on. */
-      ring: 0.5,
-      /** Seconds a puff and a clod last. */
-      dustLife: 1.5,
-      soilLife: 1.1,
-      /** Metres across at birth, and the multiple a puff swells to. */
-      dustSize: 0.42,
-      dustGrow: 3.4,
-      soilSize: 0.055,
-      /** Air drag, and the pull on a clod. Dust is light enough to hang. */
-      dustDrag: 2.6,
-      soilDrag: 0.35,
-      gravity: -17,
-      /** Buoyancy on the dust alone — what makes a plume climb as it spreads. */
-      lift: 1.5,
-      /** The moonlit face of a puff, its shaded side, and the soil. */
-      color: '#b9b2a4',
-      shadeColor: '#2b2f3a',
-      soilColor: '#33291f',
-      /** Master on the opacity. Dust that is too solid reads as smoke. */
-      opacity: 0.72
-    },
-
-    /**
-     * One light, doing two jobs: it hangs under the seal while the circle is
-     * drawing itself, and on the frame the fist lands it drops to the ground
-     * and flashes. Nothing else in the frame says "that happened *here*" as
-     * cheaply as a light that moves.
-     */
-    light: {
-      enabled: true,
-      color: '#60ff0a',
-      flashColor: '#ffe8c0',
-      /**
-       * Candela while the seal is up, and at the moment of contact.
-       *
-       * `flash` is deliberately modest for a flash. It is a point light sitting
-       * half a metre from the knuckles, so inverse-square does most of the work
-       * before the number does any: past about 60 the fist itself blows out
-       * white and the effect stops being a light on the ground and becomes a
-       * lamp inside the prop.
-       */
-      intensity: 14,
-      flash: 30,
-      /** Seconds the flash takes to fall back to nothing. */
-      flashTime: 0.35,
-      distance: 9,
-      decay: 1.9
-    }
   },
 
   /* ------------------------------------------------------------------ */
@@ -3508,338 +3041,6 @@ export const settings = {
       height: 0.6,
       distance: 10,
       decay: 1.8
-    }
-  },
-
-  /* ------------------------------------------------------------------ */
-  /* Flight — the air, and the blades that hang in it                    */
-  /* ------------------------------------------------------------------ */
-  /**
-   * `X` — the body leaves the ground, and stays there until it is told not to.
-   *
-   * This is the one ability that is a *mode* rather than a move: while it is up
-   * the feet never touch anything, the stick flies the body instead of walking
-   * it, and every other move in the game is refused (see
-   * `App#_syncAbilities`). That exclusivity is the design — a katana technique
-   * thrown from six metres up is a different game, and the answer to "what do I
-   * do up here" has to be the thing this ability brings with it.
-   *
-   * What it brings is the halo. Every body marked from the air (the same aim
-   * `V` and `Q` use — `combat/TargetMarking.js`) forges a blade out of the
-   * weapon actually on the character's hip, and that blade takes up station
-   * around them. They orbit, they charge, and on `Space` the whole set is
-   * loosed at once — one blade per mark, each one arriving on its own body a
-   * fraction of a second after the last. See `vfx/BladeStorm.js`.
-   *
-   * ## The three numbers that decide how it feels
-   *
-   *  - `height` — how far off the floor the body cruises. Under about three
-   *    metres it reads as a hover; past six the enemies are ants and the aim
-   *    stops being a look.
-   *  - `speed` — flying is meant to be *fast*. At the walk's pace the whole
-   *    mode reads as the character being stuck in treacle at altitude.
-   *  - `blades.chargeTime` — the beat between a mark and a blade being ready.
-   *    It is the reason marking six bodies takes a moment rather than being a
-   *    button-mash, and it is what makes the volley feel gathered.
-   */
-  flight: {
-    enabled: true,
-
-    /**
-     * Metres above the ground the body cruises at.
-     *
-     * The height is held against the *terrain*, re-read every frame, so flying
-     * over a hill climbs the hill. That is what keeps the camera from being
-     * buried by the first slope and what keeps the marks in reach of the aim.
-     */
-    height: 4.6,
-
-    /** Seconds to climb to that height, and to come back down out of it. */
-    takeoff: 0.75,
-    land: 0.6,
-
-    /**
-     * The idle rise and fall of a body that is hanging in the air.
-     *
-     * Small, and slow. It is the single cheapest thing here that says the
-     * character is *floating* rather than parked on an invisible platform —
-     * take it out and the hover reads as a bug in the terrain code.
-     */
-    bob: 0.16,
-    bobSpeed: 0.9,
-
-    /** Cruise and boost, m/s. Shift is the boost, as it is on the ground. */
-    speed: 8.5,
-    boost: 14.5,
-    /** How hard the air is pushed against, m/s². Loose on both ends: this drifts. */
-    acceleration: 11,
-    deceleration: 7,
-    /** Fraction of the heading gap left after a second. Slower than the walk's. */
-    turnRate: 0.004,
-
-    /**
-     * The lean.
-     *
-     * Two rotations on the body, and between them they are the whole of what
-     * makes this read as flight rather than as a walk cycle at altitude:
-     * `bank` rolls into a turn (an aircraft's answer to changing direction) and
-     * `pitch` drops the nose with speed. Both are damped by `leanRate` so they
-     * arrive after the turn does — a body that snaps into its lean is a body on
-     * rails.
-     */
-    bank: 0.62,
-    pitch: 0.3,
-    leanRate: 4.2,
-
-    /** Seconds to fade the float clip over the gait, and back off it on landing. */
-    blendIn: 0.3,
-    blendOut: 0.35,
-
-    /**
-     * The touchdown — `Landing.fbx`, once, and then back into the idle.
-     *
-     * The one thing that has to be right here is `lead`: the clip opens on a
-     * body already falling, so it is started that many seconds *before* the
-     * feet arrive rather than when they do. Too little and the character
-     * absorbs an impact it already took; too much and it crouches in mid-air.
-     * The descent is `land` seconds long, so anything past that starts the
-     * recovery the instant `X` is released.
-     */
-    recover: {
-      enabled: true,
-      /** Seconds before touchdown the clip starts. */
-      lead: 0.18,
-      /** Seconds to fade it over the gait, and back off it into the idle. */
-      blendIn: 0.1,
-      blendOut: 0.32,
-      /**
-       * How far through the clip the pose is handed back, 0..1.
-       *
-       * The tail of a landing is a body standing up again, which is what the
-       * idle already is — leaving it to play to the last frame holds the
-       * character in a recovery it finished a beat ago. Cutting at three
-       * quarters and crossing the rest into the gait is what makes the two
-       * read as one movement.
-       */
-      exitAt: 0.74
-    },
-
-    /**
-     * Choosing who a blade is forged for — `combat/TargetMarking.js` again, on
-     * its own numbers.
-     *
-     * One at a time, because every click is a *whole* mark here rather than one
-     * of a set: the mode re-arms itself the instant a lock lands, so marking is
-     * something the player does continuously while flying rather than a thing
-     * they enter and leave. The range is the longest in the game — this is the
-     * ability that is aimed from above everything.
-     */
-    marking: {
-      count: 1,
-      range: 46,
-      aim: 0.2,
-      /** Never expires: the arm *is* the flight mode, and it ends when that does. */
-      timeout: 0
-    },
-
-    /**
-     * The blades — see `vfx/BladeStorm.js`.
-     *
-     * Each one is the character's own weapon, cloned out of what is equipped on
-     * the hand at the moment it is forged — its own material, its own textures —
-     * under a fresnel rim, with the light of the thing that made it still
-     * running up the blade.
-     */
-    blades: {
-      /** How many can hang at once. Marking past this is refused, loudly. */
-      max: 6,
-
-      /**
-       * Size against the weapon as it is worn.
-       *
-       * A shade over 1: a blade hanging two metres away from the camera reads
-       * smaller than the same blade in the character's hand, and the halo wants
-       * to be legible from wherever the player happens to be looking.
-       */
-      scale: 1.15,
-
-      /**
-       * The halo.
-       *
-       * `radius` is metres from the body, `height` metres up it, and `rise` how
-       * far the ring is tilted out of horizontal — a flat ring of swords reads
-       * as a carousel, and a little tilt is what makes it read as a formation.
-       * `spin` is turns a second, and `sway` the slow individual drift that
-       * keeps the six of them from being one rigid object.
-       */
-      orbit: {
-        radius: 1.75,
-        /**
-         * How far up the body the ring hangs, as a multiple of the character's
-         * own height — so it sits in the same place whatever `targetHeight` is
-         * set to. Just over 1: the guards ride at head height and the blades
-         * hang tip-down beside the body from there.
-         */
-        height: 1.05,
-        rise: 0.55,
-        spin: 0.16,
-        tilt: 0.28,
-        sway: 0.14,
-        swaySpeed: 1.6
-      },
-
-      /**
-       * Seconds a blade takes to write itself into the air, and then to come up
-       * to full charge.
-       *
-       * The forge is a threshold sweeping up the model in the fragment shader
-       * (see the shader note in `vfx/BladeStorm.js`) — the blade is *drawn*
-       * from guard to tip rather than faded in, which is worth the two lines it
-       * costs. `chargeTime` is the beat after it: the blade is there, and now it
-       * is getting hot.
-       */
-      formTime: 0.4,
-      chargeTime: 1.1,
-
-      /**
-       * The volley.
-       *
-       * `stagger` is the gap between one blade leaving and the next. It is the
-       * most important number in the ability: at 0 the whole set arrives as one
-       * event and the six kills read as one kill, and at a tenth of a second the
-       * camera has time to be shaken six separate times.
-       *
-       * `windUp` is the pull-back before each one goes — the blade rocks
-       * backwards away from its target, aims, and *then* leaves, which is the
-       * anticipation the launch would be nothing without.
-       */
-      stagger: 0.1,
-      windUp: 0.24,
-      windBack: 0.85,
-
-      /** How fast one travels, m/s, and how hard it accelerates into that. */
-      speed: 38,
-      acceleration: 110,
-      /** Metres from the chest it counts as arrived. */
-      hitRadius: 0.5,
-      /**
-       * Metres past the body it carries on before it plants.
-       *
-       * A blade that stops dead in a chest is a prop stuck to a corpse. This one
-       * goes *through* and buries itself in the ground behind, which is what
-       * says how fast it was going.
-       */
-      overshoot: 2.6,
-      /** Seconds it stands in the ground, quivering, then burns away. */
-      plantTime: 1.6,
-      fadeTime: 0.7,
-      /** How far the plant rings, in radians, and how fast that dies out. */
-      quiver: 0.09,
-      quiverSpeed: 26,
-
-      /**
-       * The steel.
-       *
-       * The blade wears the weapon's *own* material — the same textured katana
-       * the character is holding, maps and all. Everything below is added on
-       * top of it, which is what makes the halo read as the sword doing
-       * something rather than as six props that happen to be sword-shaped.
-       */
-      look: {
-        /**
-         * The rim that draws the blade against a night sky, and the only thing
-         * the summon adds to the weapon's own material.
-         *
-         * `power` is how tight the band is — high, here, because a katana is
-         * mostly flat and a loose exponent floods the whole face with colour
-         * instead of finding its edges.
-         */
-        fresnel: {
-          color: '#59c7ff',
-          power: 3.2,
-          emissive: 2.6
-        },
-
-        /**
-         * How far the blade smears backwards while it is travelling.
-         *
-         * A stretch along its own length, in the vertex shader, scaled by how
-         * fast it is actually going: 1 is the model as authored, 3 is a streak.
-         * The cheapest motion blur there is, and on a shape this thin it is
-         * indistinguishable from an expensive one.
-         */
-        stretch: 2.6
-      },
-
-      /**
-       * What a blade does to a body, in the same shape every other move states
-       * it in — so `App#_onStrike` takes it without knowing what threw it.
-       *
-       * `slices` is true, and it is the point: this is a sword arriving at
-       * thirty-eight metres a second, and anything less than the body coming
-       * apart would be a weaker answer than the player's own slide cut gives.
-       */
-      force: {
-        impulse: 7.5,
-        lift: 3.2,
-        spin: 1.8,
-        /** Short. Six of these land in under a second, and they must not stack. */
-        hitStop: 0.055,
-        hitStopScale: 0.14,
-        shake: 0.16,
-        slices: true
-      },
-
-      /**
-       * The hit — see `vfx/BladeImpact.js`.
-       *
-       * One burst and a shower of sparks out of one buffer: the burst is the
-       * ring and the star at the point of contact, the sparks are what comes off
-       * the steel and falls. Both are additive; both are gone in half a second.
-       */
-      impact: {
-        enabled: true,
-        /** The core flash and the ring racing out of it. */
-        color: '#cfeeff',
-        ringColor: '#63c8ff',
-        size: 1.5,
-        life: 0.42,
-        intensity: 2.8,
-        /** How many spikes the star throws, and how far past the ring they reach. */
-        spikes: 7,
-        spikeLength: 1.5,
-
-        /** The sparks. */
-        sparks: 42,
-        sparkColor: '#ffd9a0',
-        sparkSpeed: 9.0,
-        sparkSpread: 0.55,
-        sparkLife: 0.55,
-        sparkSize: 0.055,
-        /** Metres a spark smears along its own velocity, per m/s of it. */
-        sparkStretch: 0.055,
-        sparkDrag: 1.6,
-        sparkGravity: -16
-      },
-
-      /**
-       * One light, doing two jobs — the same trick the fist's light plays.
-       *
-       * It hangs in the halo while the blades gather, so the character is lit
-       * from the ring of them; on contact it jumps to whatever was just hit and
-       * flashes there. A light that *moves* to the kill is the cheapest thing
-       * in the frame that says the kill happened.
-       */
-      light: {
-        enabled: true,
-        color: '#4fb8ff',
-        flashColor: '#ffe6bb',
-        intensity: 9,
-        flash: 26,
-        flashTime: 0.3,
-        distance: 11,
-        decay: 1.9
-      }
     }
   },
 

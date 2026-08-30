@@ -19,7 +19,7 @@ import { PresetManager } from './PresetManager.js';
  */
 export class Editor {
   /**
-   * @param {object} hooks { onToast, onRespawnEnemies, onCastJudgement, onCastAscendance,
+   * @param {object} hooks { onToast, onRespawnEnemies, onCastAscendance,
    *   onCastShadowBoost }
    */
   constructor(hooks = {}) {
@@ -37,11 +37,8 @@ export class Editor {
     this._buildAir();
     this._buildTerrain();
     this._buildLeaves();
-    this._buildShadowCharacter();
-    this._buildJudgement();
     this._buildAscendance();
     this._buildShadowBoost();
-    this._buildFlight();
     this._buildPost();
     this._buildCamera();
     this._buildCharacter();
@@ -647,269 +644,6 @@ export class Editor {
   }
 
   /**
-   * The two summoned shadows — see `vfx/ShadowCharacter.js`.
-   *
-   * `V` arms the mark and the last lock writes the same `active` flag this
-   * checkbox does, so the two agree either way round (hence the `listen()`).
-   * Ticking it here is the one summon that skips the marking entirely: with
-   * nothing assigned each shadow takes the nearest body it can have, which is
-   * what the pair did before there was anything to mark. Everything else is
-   * sampled by the shadow material every frame, so they can be re-dressed while
-   * they are standing beside the body.
-   */
-  _buildShadowCharacter() {
-    const folder = this.gui.addFolder('Shadow character');
-    const s = settings.shadowCharacter;
-    const R = Editor.range;
-
-    folder.add(s, 'active').name('summoned (unmarked)').listen();
-    R(folder, s, 'offset', 0, 4, 0.01, 'to each side (m)');
-    R(folder, s, 'back', -2, 3, 0.01, 'behind (m)');
-    R(folder, s, 'scale', 0.3, 2, 0.01, 'size ×');
-    R(folder, s, 'emerge', 0, 2, 0.01, 'step out (s)');
-    R(folder, s, 'crouch', 0, 6, 0.05, 'crouch hold (s)');
-
-    // Choosing who they go for — `V`, the aim, and the diamond over the head.
-    // `aim` is the one to reach for: it is how far off the middle of the frame
-    // a body may be and still be the one meant, as a fraction of the screen's
-    // height, so it is the difference between a look and a pixel hunt.
-    const mark = folder.addFolder('The mark');
-    const m = s.marking;
-    R(mark, m, 'count', 1, 2, 1, 'bodies to mark');
-    R(mark, m, 'range', 4, 80, 0.5, 'markable within (m)');
-    R(mark, m, 'aim', 0.02, 0.6, 0.005, 'aim tolerance (screens)');
-    R(mark, m, 'timeout', 0, 60, 0.5, 'arm expires after (s)');
-
-    const marker = mark.addFolder('The diamond');
-    const ml = m.look;
-    marker.addColor(ml, 'color').name('under the aim');
-    marker.addColor(ml, 'lockColor').name('locked');
-    R(marker, ml, 'size', 0.1, 2, 0.01, 'size (m)');
-    R(marker, ml, 'lift', 0, 2, 0.01, 'above the head (m)');
-    R(marker, ml, 'width', 0.01, 0.5, 0.005, 'outline width');
-    R(marker, ml, 'softness', 0.005, 0.3, 0.005, 'feather');
-    R(marker, ml, 'intensity', 0, 6, 0.05, 'brightness');
-    R(marker, ml, 'pulse', 0, 1, 0.01, 'breath depth');
-    R(marker, ml, 'pulseSpeed', 0, 20, 0.1, 'breath speed');
-    R(marker, ml, 'pop', 0, 2, 0.01, 'lock snap');
-    R(marker, ml, 'fadeIn', 0.01, 1, 0.01, 'fade in (s)');
-    R(marker, ml, 'fadeOut', 0.01, 1, 0.01, 'fade out (s)');
-
-    // The errand: from the crouch to the blow landing. Where the run stops is
-    // the striking move's own `standoff` under Combat, the ground its warp
-    // covers, and the slack here.
-    const hunt = folder.addFolder('The hunt');
-    const h = s.hunt;
-    R(hunt, h, 'speed', 0.5, 12, 0.05, 'run speed (m/s)');
-    // The pose only — the approach is aimed at the target, so no value here can
-    // cost the pair a kill.
-    R(hunt, h, 'turnRate', 0.000001, 0.05, 0.000001, 'turn follow');
-    R(hunt, h, 'slack', 0, 1, 0.01, 'standoff slack (m)');
-    R(hunt, h, 'timeout', 1, 30, 0.5, 'give up after (s)');
-
-    // What it finishes with — one of the player's own attacks, thrown on that
-    // move's numbers under Combat. `lead` is the hand-over from run to move:
-    // at 1 the body keeps the speed it arrived at, which is the join to watch.
-    const strike = folder.addFolder('The strike');
-    const st = s.strike;
-    strike
-      .add(st, 'move', { 'slide cut': 'crouchSlash', 'slash hit': 'slashHit', kick: 'kick' })
-      .name('finisher');
-    R(strike, st, 'lead', 0.2, 2, 0.01, 'brakes ← → lunges');
-
-    // The vanish — the same noise burn the enemies die by, in violet.
-    const dissolve = folder.addFolder('Vanish');
-    const d = s.dissolve;
-    R(dissolve, d, 'time', 0.1, 4, 0.01, 'burn (s)');
-    R(dissolve, d, 'detail', 1, 60, 0.5, 'noise detail');
-    R(dissolve, d, 'rise', 0, 1, 0.01, 'rise vs noise');
-    dissolve.addColor(d, 'edgeColor').name('edge colour');
-    R(dissolve, d, 'edgeEmissive', 0, 12, 0.01, 'edge emissive');
-    R(dissolve, d, 'edgeWidth', 0.005, 0.4, 0.005, 'edge width');
-
-    // The dark. Not quite black on purpose — see the note in settings.js.
-    const dark = folder.addFolder('Darkness');
-    dark.addColor(s, 'color').name('body colour');
-    R(dark, s, 'roughness', 0, 1, 0.01, 'roughness');
-    R(dark, s, 'metalness', 0, 1, 0.01, 'metalness');
-
-    // The rim that draws the silhouette. `power` tightens the band toward the
-    // outline; `emissive` is how hard it burns.
-    const fresnel = folder.addFolder('Fresnel rim');
-    const fr = s.fresnel;
-    fresnel.addColor(fr, 'color').name('rim colour');
-    R(fresnel, fr, 'power', 0.2, 8, 0.05, 'rim tightness');
-    R(fresnel, fr, 'emissive', 0, 10, 0.01, 'rim emissive');
-  }
-
-  /**
-   * The fist — `Q`, and everything that arrives with it.
-   *
-   * The button at the top is the one to use while tuning: it calls the whole
-   * thing down on the nearest body without going through the mark, so a number
-   * can be moved and seen again two seconds later. Everything below is sampled
-   * every frame, so a slider moved while the fist is falling lands on the fist
-   * that is falling.
-   *
-   * The three numbers worth reaching for first are `height` (the length of the
-   * drop, and therefore its weight), `fall` (a quarter second is a punch, half
-   * is a boulder) and `fist → size` — see the note in settings.js.
-   */
-  _buildJudgement() {
-    const folder = this.gui.addFolder('Judgement (the fist)');
-    const j = settings.judgement;
-    const R = Editor.range;
-
-    folder
-      .add({ cast: () => this.hooks.onCastJudgement?.() }, 'cast')
-      .name('Call it down (nearest)');
-    folder.add(j, 'enabled').name('enabled');
-    R(folder, j, 'height', 1.2, 12, 0.05, 'seal height (m)');
-
-    // The choreography. `fall` is the only one that is about force rather than
-    // pacing, and `charge` is the beat the move would be nothing without.
-    const beats = folder.addFolder('Beats (s)');
-    const b = j.beats;
-    R(beats, b, 'open', 0.05, 2, 0.01, 'seal draws itself');
-    R(beats, b, 'charge', 0, 3, 0.01, 'held, gathering');
-    R(beats, b, 'fall', 0.05, 1.5, 0.01, 'the drop');
-    R(beats, b, 'dwell', 0, 3, 0.01, 'planted');
-    R(beats, b, 'withdraw', 0.05, 2, 0.01, 'pulled back');
-    R(beats, b, 'close', 0.05, 2, 0.01, 'seal folds away');
-
-    // Who it can be called down on. `aim` is the same control the shadows have:
-    // how far off the middle of the frame a body may be and still be the one
-    // meant, as a fraction of the screen's height.
-    const mark = folder.addFolder('The mark');
-    const m = j.marking;
-    R(mark, m, 'range', 4, 80, 0.5, 'markable within (m)');
-    R(mark, m, 'aim', 0.02, 0.6, 0.005, 'aim tolerance (screens)');
-    R(mark, m, 'timeout', 0, 60, 0.5, 'arm expires after (s)');
-
-    // The circle. Every mark on it is arithmetic in one fragment shader, so the
-    // counts below are free — turn `runes` up and there are simply more of them.
-    const seal = folder.addFolder('The seal');
-    const s = j.seal;
-    R(seal, s, 'radius', 0.4, 5, 0.05, 'radius (m)');
-    seal.addColor(s, 'color').name('line colour');
-    seal.addColor(s, 'coreColor').name('core colour');
-    R(seal, s, 'intensity', 0, 8, 0.05, 'brightness');
-    R(seal, s, 'spin', -2, 2, 0.01, 'turns a second');
-    R(seal, s, 'ticks', 4, 120, 1, 'ticks');
-    R(seal, s, 'runes', 3, 40, 1, 'runes');
-    R(seal, s, 'spokes', 2, 24, 1, 'spokes');
-    R(seal, s, 'width', 0.002, 0.06, 0.001, 'stroke weight');
-    R(seal, s, 'softness', 0.001, 0.06, 0.001, 'feather');
-    R(seal, s, 'haze', 0, 2, 0.01, 'inner glow');
-    R(seal, s, 'detail', 0, 1, 0.01, 'mottling');
-    R(seal, s, 'pulse', 0, 1, 0.01, 'breath depth');
-    R(seal, s, 'pulseSpeed', 0, 20, 0.1, 'breath speed');
-
-    // The arm. There is no colour map on this model at all — the whole look is
-    // the rim and the relief below, placed by its normal map.
-    const fist = folder.addFolder('The fist');
-    const f = j.fist;
-    R(fist, f, 'scale', 0.4, 4, 0.01, 'size ×');
-    R(fist, f, 'crush', 0, 1.5, 0.01, 'stops above ground (m)');
-    fist.addColor(f, 'color').name('body colour');
-    R(fist, f, 'roughness', 0, 1, 0.01, 'roughness');
-    R(fist, f, 'metalness', 0, 1, 0.01, 'metalness');
-    R(fist, f, 'normalScale', 0, 3, 0.01, 'relief depth');
-    R(fist, f, 'flash', 0, 10, 0.05, 'contact flash');
-    R(fist, f, 'flashTime', 0.02, 1, 0.01, 'flash fades (s)');
-
-    const rim = fist.addFolder('Fresnel rim');
-    const fr = f.fresnel;
-    rim.addColor(fr, 'color').name('rim colour');
-    R(rim, fr, 'power', 0.2, 8, 0.05, 'rim tightness');
-    R(rim, fr, 'emissive', 0, 10, 0.01, 'rim emissive');
-
-    // The light inside the sculpt. `gain` is the control: relief is a small
-    // number and has to be opened right up before it reads at all.
-    const veins = fist.addFolder('Veins (in the relief)');
-    const v = f.veins;
-    veins.addColor(v, 'color').name('cold colour');
-    veins.addColor(v, 'hotColor').name('hot colour');
-    R(veins, v, 'emissive', 0, 10, 0.01, 'emissive');
-    R(veins, v, 'gain', 0.5, 20, 0.1, 'relief gain');
-    R(veins, v, 'sharpness', 0.2, 6, 0.05, 'relief sharpness');
-    R(veins, v, 'scale', 0.5, 30, 0.1, 'field scale');
-    R(veins, v, 'speed', 0, 5, 0.01, 'field speed');
-    R(veins, v, 'cavity', 0, 1, 0.01, 'cavity shading');
-
-    const birth = fist.addFolder('Through the seal');
-    const bl = f.birth;
-    birth.addColor(bl, 'color').name('line colour');
-    R(birth, bl, 'emissive', 0, 12, 0.05, 'line emissive');
-    R(birth, bl, 'width', 0.01, 1, 0.005, 'line width (m)');
-
-    // What it does to a body. `lift` is negative here and positive on every
-    // other move in the game — see the note in settings.js.
-    const force = folder.addFolder('The blow');
-    const fo = j.force;
-    R(force, fo, 'reach', 0.2, 6, 0.05, 'crushes within (m)');
-    R(force, fo, 'impulse', 0, 20, 0.1, 'outward (m/s)');
-    R(force, fo, 'lift', -30, 10, 0.1, 'down ← → up (m/s)');
-    R(force, fo, 'spin', 0, 4, 0.05, 'upper body takes');
-    R(force, fo, 'hitStop', 0, 0.5, 0.005, 'freeze (s)');
-    R(force, fo, 'hitStopScale', 0.01, 1, 0.005, 'freeze depth');
-    R(force, fo, 'shake', 0, 1.5, 0.01, 'camera shake (m)');
-
-    // The ground. The cracks only open behind the wave, which is what stops the
-    // pair reading as one decal fading in.
-    const shock = folder.addFolder('The ground');
-    const sh = j.shock;
-    R(shock, sh, 'radius', 0.5, 12, 0.1, 'wave reaches (m)');
-    R(shock, sh, 'life', 0.1, 3, 0.01, 'wave lasts (s)');
-    shock.addColor(sh, 'color').name('wave colour');
-    shock.addColor(sh, 'crackColor').name('crack colour');
-    R(shock, sh, 'intensity', 0, 8, 0.05, 'brightness');
-    R(shock, sh, 'width', 0.01, 0.4, 0.005, 'wave width');
-    R(shock, sh, 'softness', 0.01, 0.5, 0.005, 'feather');
-    R(shock, sh, 'cracks', 0, 32, 1, 'cracks');
-    R(shock, sh, 'crackLength', 0.1, 1, 0.01, 'crack reach');
-    R(shock, sh, 'crackWidth', 0.002, 0.1, 0.001, 'crack width');
-    R(shock, sh, 'crackGlow', 0, 5, 0.05, 'crack glow');
-    R(shock, sh, 'lift', 0, 0.3, 0.005, 'off the floor (m)');
-
-    // Dust and soil — the only thing in the ability that is lit rather than
-    // emitted, which is exactly why it sells the impact.
-    const dust = folder.addFolder('Dust & soil');
-    const d = j.dust;
-    dust.add(d, 'enabled').name('enabled');
-    R(dust, d, 'puffs', 0, 120, 1, 'dust puffs');
-    R(dust, d, 'clods', 0, 160, 1, 'soil clods');
-    R(dust, d, 'speed', 0.5, 20, 0.1, 'launch (m/s)');
-    R(dust, d, 'spread', 0, 1.5, 0.01, 'scatter');
-    R(dust, d, 'rise', 0, 2, 0.01, 'up vs out');
-    R(dust, d, 'ring', 0, 3, 0.05, 'born at radius (m)');
-    R(dust, d, 'dustLife', 0.1, 6, 0.05, 'dust lasts (s)');
-    R(dust, d, 'soilLife', 0.1, 4, 0.05, 'soil lasts (s)');
-    R(dust, d, 'dustSize', 0.02, 2, 0.01, 'dust size (m)');
-    R(dust, d, 'dustGrow', 1, 10, 0.05, 'dust swells ×');
-    R(dust, d, 'soilSize', 0.005, 0.5, 0.005, 'soil size (m)');
-    R(dust, d, 'dustDrag', 0.05, 8, 0.05, 'dust drag /s');
-    R(dust, d, 'soilDrag', 0.05, 4, 0.01, 'soil drag /s');
-    R(dust, d, 'gravity', -40, 0, 0.5, 'gravity (m/s²)');
-    R(dust, d, 'lift', 0, 6, 0.05, 'dust buoyancy');
-    dust.addColor(d, 'color').name('lit dust');
-    dust.addColor(d, 'shadeColor').name('shaded dust');
-    dust.addColor(d, 'soilColor').name('soil');
-    R(dust, d, 'opacity', 0, 1.5, 0.01, 'opacity');
-
-    const light = folder.addFolder('Its light');
-    const l = j.light;
-    light.add(l, 'enabled').name('enabled');
-    light.addColor(l, 'color').name('seal colour');
-    light.addColor(l, 'flashColor').name('contact colour');
-    R(light, l, 'intensity', 0, 60, 0.5, 'while it gathers');
-    R(light, l, 'flash', 0, 400, 1, 'on contact');
-    R(light, l, 'flashTime', 0.05, 2, 0.01, 'flash fades (s)');
-    R(light, l, 'distance', 1, 40, 0.5, 'reach (m)');
-    R(light, l, 'decay', 0.5, 3, 0.05, 'decay');
-  }
-
-  /**
    * Ascendance — the light, and the ten seconds it leaves behind.
    *
    * Five layers, one folder each, because that is how the effect is built and
@@ -1238,150 +972,6 @@ export class Editor {
     R(light, l, 'height', 0, 1.5, 0.01, 'hangs at (frac of body)');
     R(light, l, 'distance', 1, 40, 0.5, 'reaches (m)');
     R(light, l, 'decay', 0.5, 4, 0.05, 'falloff');
-  }
-
-  /**
-   * Flight, and the blades it hangs in the air — see `vfx/BladeStorm.js`.
-   *
-   * Three numbers before any of the others: `height` (how far off the floor the
-   * body cruises, which is also how far the aim is looking down), `speed` (this
-   * has to be *fast* or the whole mode reads as walking at altitude) and
-   * `blades → volley → stagger`, which is the difference between six kills and
-   * one event.
-   */
-  _buildFlight() {
-    const folder = this.gui.addFolder('Flight (X) & the blades');
-    const f = settings.flight;
-    const R = Editor.range;
-
-    folder.add(f, 'enabled').name('enabled');
-    R(folder, f, 'height', 1, 20, 0.1, 'cruise height (m)');
-    R(folder, f, 'speed', 1, 30, 0.1, 'cruise (m/s)');
-    R(folder, f, 'boost', 1, 40, 0.1, 'boost — shift (m/s)');
-
-    const air = folder.addFolder('In the air');
-    R(air, f, 'takeoff', 0.1, 3, 0.01, 'climb takes (s)');
-    R(air, f, 'land', 0.1, 3, 0.01, 'descent takes (s)');
-    R(air, f, 'acceleration', 1, 40, 0.5, 'accelerates (m/s²)');
-    R(air, f, 'deceleration', 1, 40, 0.5, 'decelerates (m/s²)');
-    // Lower is snappier: it is the fraction of the heading gap left after a
-    // second, and the bank below is drawn off how fast that gap closes.
-    R(air, f, 'turnRate', 0.0001, 0.2, 0.0001, 'turn (gap left after 1s)');
-    R(air, f, 'bank', 0, 1.5, 0.01, 'roll into turns (rad)');
-    R(air, f, 'pitch', 0, 1, 0.01, 'nose down at speed (rad)');
-    R(air, f, 'leanRate', 0.5, 20, 0.1, 'lean arrives (1/s)');
-    R(air, f, 'bob', 0, 1, 0.005, 'hover breath (m)');
-    R(air, f, 'bobSpeed', 0, 4, 0.01, 'breath speed (Hz)');
-    R(air, f, 'blendIn', 0.02, 1.5, 0.01, 'pose fades in (s)');
-    R(air, f, 'blendOut', 0.02, 1.5, 0.01, 'pose fades out (s)');
-
-    // The touchdown. `lead` is the only one that has to be judged against the
-    // clip rather than by taste: it is how far *before* the feet arrive the
-    // landing starts, so its impact frame is the frame they land on.
-    const down = folder.addFolder('The touchdown');
-    const r = f.recover;
-    down.add(r, 'enabled').name('landing clip');
-    R(down, r, 'lead', 0, 1, 0.01, 'starts early by (s)');
-    R(down, r, 'blendIn', 0.02, 1, 0.01, 'fades in (s)');
-    R(down, r, 'blendOut', 0.02, 1.5, 0.01, 'hands to idle over (s)');
-    R(down, r, 'exitAt', 0.1, 1, 0.01, 'released at (phase)');
-
-    // The aim. One body at a time, and it re-arms itself on every click.
-    const mark = folder.addFolder('The mark');
-    const m = f.marking;
-    R(mark, m, 'range', 4, 100, 0.5, 'markable within (m)');
-    R(mark, m, 'aim', 0.02, 0.6, 0.005, 'aim tolerance (screens)');
-
-    const blades = folder.addFolder('The blades');
-    const b = f.blades;
-    R(blades, b, 'max', 1, 16, 1, 'how many can hang');
-    R(blades, b, 'scale', 0.3, 3, 0.01, 'size ×');
-    R(blades, b, 'formTime', 0.05, 2, 0.01, 'forges over (s)');
-    R(blades, b, 'chargeTime', 0.05, 4, 0.01, 'comes to charge (s)');
-
-    // The ring itself. `spin` and `sway` are what stop six swords from reading
-    // as one rigid carousel.
-    const orbit = blades.addFolder('The halo');
-    const o = b.orbit;
-    R(orbit, o, 'radius', 0.4, 6, 0.05, 'radius (m)');
-    R(orbit, o, 'height', 0.2, 2.5, 0.01, 'up the body ×');
-    R(orbit, o, 'rise', 0, 2, 0.01, 'ring tilt');
-    R(orbit, o, 'spin', -2, 2, 0.01, 'turns a second');
-    R(orbit, o, 'tilt', 0, 1.5, 0.01, 'blades lean out');
-    R(orbit, o, 'sway', 0, 1, 0.005, 'sway (m)');
-    R(orbit, o, 'swaySpeed', 0, 6, 0.05, 'sway speed');
-
-    // The volley. `stagger` first — see the note above.
-    const volley = blades.addFolder('The volley');
-    R(volley, b, 'stagger', 0, 0.6, 0.005, 'gap between them (s)');
-    R(volley, b, 'windUp', 0.02, 1, 0.01, 'pull-back (s)');
-    R(volley, b, 'windBack', 0, 3, 0.05, 'pulls back (m)');
-    R(volley, b, 'speed', 5, 90, 0.5, 'travels at (m/s)');
-    R(volley, b, 'acceleration', 10, 400, 5, 'accelerates (m/s²)');
-    R(volley, b, 'hitRadius', 0.1, 2, 0.01, 'arrives within (m)');
-    R(volley, b, 'overshoot', 0, 8, 0.05, 'buries itself past (m)');
-    R(volley, b, 'plantTime', 0.1, 6, 0.05, 'stands in the ground (s)');
-    R(volley, b, 'fadeTime', 0.1, 3, 0.01, 'burns away over (s)');
-    R(volley, b, 'quiver', 0, 0.4, 0.005, 'rings (rad)');
-    R(volley, b, 'quiverSpeed', 1, 60, 0.5, 'ring speed');
-
-    // The steel. The blade wears the weapon's own textured material and nothing
-    // here replaces or dials it — the rim is the whole of what is added.
-    const look = blades.addFolder('The steel');
-    const lk = b.look;
-    R(look, lk, 'stretch', 1, 8, 0.05, 'smear while flying ×');
-
-    const rim = look.addFolder('Fresnel rim');
-    const fr = lk.fresnel;
-    rim.addColor(fr, 'color').name('rim colour');
-    R(rim, fr, 'power', 0.2, 8, 0.05, 'rim tightness');
-    R(rim, fr, 'emissive', 0, 10, 0.01, 'rim emissive');
-
-    // What a blade does to a body. `slices` is the one that matters: it is a
-    // sword, and it should take them apart.
-    const force = blades.addFolder('The blow');
-    const fo = b.force;
-    R(force, fo, 'impulse', 0, 30, 0.1, 'along the blade (m/s)');
-    R(force, fo, 'lift', -20, 20, 0.1, 'up (m/s)');
-    R(force, fo, 'spin', 0, 4, 0.05, 'upper body takes');
-    R(force, fo, 'hitStop', 0, 0.4, 0.005, 'freeze (s)');
-    R(force, fo, 'hitStopScale', 0.01, 1, 0.005, 'freeze depth');
-    R(force, fo, 'shake', 0, 1.5, 0.01, 'camera shake (m)');
-    force.add(fo, 'slices').name('cuts them in half');
-
-    // The hit: one burst and a shower of sparks out of one buffer.
-    const hit = blades.addFolder('The hit');
-    const im = b.impact;
-    hit.add(im, 'enabled').name('enabled');
-    hit.addColor(im, 'color').name('flash colour');
-    hit.addColor(im, 'ringColor').name('ring colour');
-    R(hit, im, 'size', 0.2, 6, 0.05, 'size (m)');
-    R(hit, im, 'life', 0.05, 2, 0.01, 'lasts (s)');
-    R(hit, im, 'intensity', 0, 10, 0.05, 'brightness');
-    R(hit, im, 'spikes', 0, 16, 1, 'star spikes');
-    R(hit, im, 'spikeLength', 0.2, 4, 0.05, 'spike reach');
-
-    const sparks = hit.addFolder('Sparks');
-    R(sparks, im, 'sparks', 0, 160, 1, 'how many');
-    sparks.addColor(im, 'sparkColor').name('colour');
-    R(sparks, im, 'sparkSpeed', 0.5, 40, 0.1, 'launch (m/s)');
-    R(sparks, im, 'sparkSpread', 0, 1.3, 0.01, 'cone');
-    R(sparks, im, 'sparkLife', 0.05, 3, 0.01, 'lasts (s)');
-    R(sparks, im, 'sparkSize', 0.005, 0.4, 0.005, 'size (m)');
-    R(sparks, im, 'sparkStretch', 0, 0.3, 0.001, 'smear per m/s');
-    R(sparks, im, 'sparkDrag', 0.05, 8, 0.05, 'drag /s');
-    R(sparks, im, 'sparkGravity', -40, 0, 0.5, 'gravity (m/s²)');
-
-    const light = blades.addFolder('Its light');
-    const li = b.light;
-    light.add(li, 'enabled').name('enabled');
-    light.addColor(li, 'color').name('halo colour');
-    light.addColor(li, 'flashColor').name('contact colour');
-    R(light, li, 'intensity', 0, 60, 0.5, 'while they gather');
-    R(light, li, 'flash', 0, 300, 1, 'on contact');
-    R(light, li, 'flashTime', 0.05, 2, 0.01, 'flash fades (s)');
-    R(light, li, 'distance', 1, 40, 0.5, 'reach (m)');
-    R(light, li, 'decay', 0.5, 3, 0.05, 'decay');
   }
 
   _buildPost() {
@@ -1853,8 +1443,8 @@ export class Editor {
    *
    * The move's own numbers are in the `Sword combo (Z)` folder above, with
    * every other attack's, because it is the same machine as they are. This is
-   * only the part of it that is *light*, and it is a folder of its own for the
-   * same reason `Judgement` has one: there is far more of it than of the move.
+   * only the part of it that is *light*, and it is a folder of its own because
+   * there is far more of it than of the move.
    *
    * If only one control here is ever touched, make it the crescent's `razor` —
    * it is where the hard white line sits along the leading edge, and it is the
@@ -1881,7 +1471,7 @@ export class Editor {
     const shape = wave.addFolder('Shape');
     R(shape, c.wave, 'spread', 0.6, 3.1, 0.01, 'arc subtends (rad)');
     R(shape, c.wave, 'converge', 0, 0.95, 0.01, 'inner edge bows in');
-    R(shape, c.wave, 'bow', 0, 1, 0.01, 'bowed back by');
+    R(shape, c.wave, 'bow', 0, 1, 0.01, 'tips cup out by');
     R(shape, c.wave, 'tail', 0, 2, 0.01, 'veil length (× radius)');
     R(shape, c.wave, 'tipTaper', 0.15, 2, 0.01, 'tip sharpness');
     R(shape, c.wave, 'razor', 0.5, 0.995, 0.005, 'edge line at');
@@ -1988,7 +1578,7 @@ export class Editor {
     impact.addColor(c.impact, 'ringColor').name('ring colour');
     impact.addColor(c.impact, 'sparkColor').name('spark colour');
 
-    // The ground's answer under the finisher — the judgement's system again.
+    // The ground's answer under the finisher — `vfx/ShockRing.js`.
     const shock = folder.addFolder('Ground wave');
     shock.add(c.shock, 'enabled').name('enabled');
     R(shock, c.shock, 'radius', 0.5, 10, 0.1, 'reaches (m)');
@@ -2014,6 +1604,30 @@ export class Editor {
     R(light, c.light, 'arrive', 0, 1, 0.01, 'on landing ×');
     R(light, c.light, 'finish', 0, 1, 0.01, 'on finisher ×');
     light.addColor(c.light, 'color').name('colour');
+
+    // The one part of the move that happens on the body — `vfx/ShadowDash.js`.
+    // `starts before` and `holds past` are stated against the move's own
+    // approach (`warpFrom`/`warpAt` in the folder above), so retiming the dash
+    // carries the burn with it and neither control has to be touched again.
+    const dash = folder.addFolder('Shadow dash');
+    const d = c.shadowDash;
+    dash.add(d, 'enabled').name('enabled');
+    R(dash, d, 'lead', 0, 0.3, 0.005, 'starts before dash (phase)');
+    R(dash, d, 'linger', 0, 0.3, 0.005, 'holds past arrival (phase)');
+    R(dash, d, 'enter', 0.02, 1, 0.01, 'goes dark over (s)');
+    R(dash, d, 'exit', 0.02, 1.5, 0.01, 'comes back over (s)');
+    R(dash, d, 'detail', 1, 40, 0.5, 'burn detail (/m)');
+    R(dash, d, 'rise', 0, 1, 0.01, 'burn rises');
+    R(dash, d, 'drift', 0, 4, 0.05, 'field crawls at (/s)');
+    R(dash, d, 'roughness', 0, 1, 0.01, 'roughness');
+    R(dash, d, 'metalness', 0, 1, 0.01, 'metalness');
+    R(dash, d.fresnel, 'power', 0.2, 8, 0.05, 'rim tightness');
+    R(dash, d.fresnel, 'emissive', 0, 8, 0.01, 'rim emissive');
+    R(dash, d, 'edgeEmissive', 0, 20, 0.1, 'burn emissive');
+    R(dash, d, 'edgeWidth', 0.01, 0.5, 0.005, 'burn width');
+    dash.addColor(d, 'color').name('shade colour');
+    dash.addColor(d.fresnel, 'color').name('rim colour');
+    dash.addColor(d, 'edgeColor').name('burn colour');
   }
 
   /**
@@ -2047,7 +1661,7 @@ export class Editor {
     R(beats, c.beats, 'close', 0.05, 2, 0.01, 'pinches out over (s)');
     R(beats, c.beats, 'ripple', 0.05, 1.5, 0.01, 'rune ripple (s)');
 
-    // 1. The circle on the ground. The same shader the judgement's seal uses.
+    // 1. The circle on the ground. The same shader the light's seal uses.
     const seal = folder.addFolder('1 · Runes');
     R(seal, c.seal, 'radius', 0.4, 6, 0.05, 'radius (m)');
     R(seal, c.seal, 'lift', 0, 0.3, 0.005, 'off the floor (m)');

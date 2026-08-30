@@ -56,25 +56,30 @@ const _aim = new Vector3();
  *  - the sheet's radius **converges** toward the tail, which is what makes the
  *    silhouette a crescent rather than a band — the inner edge bows further in
  *    than the outer one;
- *  - it is **swept back** along the direction of travel, hardest in the middle,
+ *  - it is **swept back** down the direction of travel, hardest in the middle,
  *    because the middle of a sword's arc is the part that was moving fastest;
  *  - both are scaled by a **taper** that reaches zero at `|u| = 1`, so the tips
  *    close to a point. A crescent with blunt ends reads as a croissant; the
  *    whole thing has to end in something that could cut.
  *
- * The sheet is also **bowed** backward along its own arc so it is not a flat
- * card. That is what keeps it alive when the camera is off to one side: a flat
- * plane flying edge-on to the lens is a one-pixel line, and this is the frame
- * the player is most likely to be watching it from.
+ * The sheet is also **cupped** out of its own plane, the tips lifting clear of
+ * the middle, so it is not a flat card. That is what keeps it alive from
+ * straight above: a flat plane edge-on to the lens is a one-pixel line, and the
+ * third-person camera spends most of its time looking down on this one.
  *
  * ## Where the plane sits
  *
- * Local `+Z` is the direction of travel and the crescent lies across it, so the
- * wave is a wall of light moving face-first. Which way up that wall is turned
- * is `roll` — a rotation about the travel axis, and the one number that says
- * whether this was a horizontal sweep or an overhead chop. It is read straight
- * off the clip: the first beat comes down a steep diagonal and the second goes
- * across, so the two arrive crossed, which is the whole reason to throw two.
+ * Local `+Z` is the direction of travel and the crescent lies **along** it,
+ * not across it: the apex of the arc leads, the tips trail, and the veil is
+ * dragged off the back. That is the whole point of the orientation — the hard
+ * white edge is the side the target sees coming, and everything blue is behind
+ * it, so a cut in flight reads as aimed at somebody rather than as an arc
+ * standing up in the air.
+ *
+ * Which way the sheet is turned about that axis is `roll`. **Zero lays it
+ * flat** — a horizontal sweep going across whoever it was thrown at — and a
+ * right angle stands it on edge into an overhead chop. It is read straight off
+ * the clip that threw it.
  *
  * ## What it does not know
  *
@@ -456,14 +461,20 @@ void main() {
   float radius = 1.0 - back * uConverge * taper;
 
   vec3 local;
+  // Across the line of flight: the arc's span, tip to tip.
   local.x = radius * sin(theta);
+  // Along it, toward whatever the cut was thrown at. The arc curves in the
+  // plane of its own flight, so the apex leads and the tips trail — which is
+  // what puts the razor edge on the target's side and the veil behind it.
   // Recentred on the chord between the tips, so the crescent sits *on* the
-  // point it was thrown from rather than a radius in front of it.
-  local.y = radius * cos(theta) - cos(uSpread * 0.5);
-  // Bowed back along the arc so it is not a flat card, and dragged further
-  // back the closer to the tail — squared, so the veil trails off rather than
-  // ending on a crease.
-  local.z = -uBow * (1.0 - cos(theta)) - back * back * uTail * taper;
+  // point it was thrown from rather than a radius short of it, and dragged
+  // further back the closer to the tail — squared, so the veil trails off
+  // rather than ending on a crease.
+  local.z = radius * cos(theta) - cos(uSpread * 0.5) - back * back * uTail * taper;
+  // Lifted out of the plane the arc lies in, the tips clear of the middle, so
+  // the sheet is a shallow cup rather than a flat card with nothing to catch
+  // the camera looking down on it.
+  local.y = uBow * (1.0 - cos(theta));
 
   vU = u;
   vV = v;

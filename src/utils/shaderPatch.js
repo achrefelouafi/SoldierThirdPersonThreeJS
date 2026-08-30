@@ -16,7 +16,8 @@
  * identically: three hands them all whichever program compiled first, and every
  * later material silently renders with another system's shader and another
  * system's uniforms. (That is what put the enemies' orange dissolve rim on the
- * summoned shadows — two skinned standard materials, same defines, one program.)
+ * player's own body — two skinned standard materials, same defines, one
+ * program.)
  *
  * So the key is rebuilt from what actually decides the shader: the source of
  * each injected patch, chained onto whatever key the material already had. Two

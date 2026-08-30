@@ -30,8 +30,7 @@ const SPARK = 1;
  * the edge and falling. They are one draw call and one buffer because the only
  * thing that separates them is four numbers and a branch: the burst stands
  * still and animates in the fragment shader, the spark travels and animates by
- * moving. It is the same trick `vfx/DustBurst.js` plays on dust and soil, and
- * the notes there are the ones to read for the machinery — the CPU only ever
+ * moving. The CPU only ever
  * *births* a sprite (twelve floats into a ring buffer, never touched again) and
  * the trajectory is a closed form evaluated per vertex, because linear drag
  * under a constant acceleration has an exact solution.
@@ -127,7 +126,7 @@ export class BladeImpact {
    *
    * @param {number} time the simulation's clock — a hit holds through the
    *   hit-stop it caused, which is most of why the freeze reads as impact
-   * @param {object} config `settings.flight.blades.impact`
+   * @param {object} config `settings.swordCombo.impact`
    */
   sync(time, config) {
     const u = this.material.uniforms;
@@ -160,7 +159,7 @@ export class BladeImpact {
    * @param {number} dx unit direction the blade was travelling
    * @param {number} dy
    * @param {number} dz
-   * @param {object} config `settings.flight.blades.impact`
+   * @param {object} config `settings.swordCombo.impact`
    * @param {number} [strength] master on the counts and the size
    */
   burst(x, y, z, dx, dy, dz, config, strength = 1) {

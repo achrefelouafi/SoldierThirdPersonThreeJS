@@ -99,7 +99,7 @@ export class Gunplay {
    *   the pointer. Read, never taken: the mode fires off a pointer the stage
    *   captured rather than capturing one of its own.
    * @param {() => boolean} [options.blocked] whether something else has the
-   *   body — the studio, a marked ability, flight
+   *   body — the studio, a marked ability
    * @param {(point: Vector3, direction: Vector3, count: number, speed: number) => void} [options.onBlood]
    * @param {(seconds: number, scale: number) => void} [options.onHitStop]
    */

@@ -120,7 +120,7 @@ export class ShockRing {
    *
    * @param {number} x world
    * @param {number} z
-   * @param {object} config `settings.judgement.shock`
+   * @param {object} config `settings.swordCombo.shock`
    * @param {number} [strength] master on this one wave's brightness and reach
    */
   burst(x, z, config, strength = 1) {
@@ -141,7 +141,7 @@ export class ShockRing {
   /**
    * @param {number} dt seconds, on the simulation's clock — a wave is part of
    *   the blow that caused it, so it holds with the hit-stop
-   * @param {object} config `settings.judgement.shock`
+   * @param {object} config `settings.swordCombo.shock`
    */
   update(dt, config) {
     for (let i = this._waves.length - 1; i >= 0; i--) {

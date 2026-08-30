@@ -181,10 +181,9 @@ export class WeaponDissolve {
      * The surface this was made from, before the mask went on it.
      *
      * Anything that copies a weapon's material to make something *else* out of
-     * it has to start here, not from the clone: `BladeStorm` forges its blades
-     * out of the katana that is on the body, and a blade that inherited this
-     * mask would inherit its threshold with it — so every blade forged while
-     * the rifle was drawn would be born already burnt away.
+     * it has to start here, not from the clone: a copy taken off this one would
+     * inherit the mask's threshold with it, so anything forged while the rifle
+     * was drawn would be born already burnt away.
      *
      * A plain own property rather than `userData`, which `Material.copy`
      * deep-clones through JSON and a material reference does not survive.
@@ -194,8 +193,7 @@ export class WeaponDissolve {
     // `Material.copy` does not carry own-property `onBeforeCompile`, so a
     // patch already on the weapon would be silently dropped by the clone —
     // along with the cache key that says which program it belongs to. See
-    // `utils/shaderPatch.js`, and `BladeStorm#_createMaterial` for the same
-    // hand-off on the same models.
+    // `utils/shaderPatch.js`.
     if (Object.hasOwn(source, 'onBeforeCompile')) {
       material.onBeforeCompile = source.onBeforeCompile;
       if (Object.hasOwn(source, 'customProgramCacheKey')) {

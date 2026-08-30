@@ -181,7 +181,7 @@ function matrixRelativeTo(node, ancestor, out) {
  *
  * The export carries no textures whatsoever, so the material is authored here
  * rather than imported: a cold near-black body, a fresnel rim (the same device
- * the summoned shadows use, in an ember colour instead of violet) so the
+ * the combo's dash uses, in an ember colour instead of violet) so the
  * silhouette reads against a blue night, and a dissolve that burns the corpse
  * away from the feet up. Every enemy gets its own copy of that material,
  * because the dissolve is per-body — five materials is nothing, and it is what

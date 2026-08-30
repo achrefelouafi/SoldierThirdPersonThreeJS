@@ -120,18 +120,6 @@ export class ThirdPersonController {
       if (this.input.consumeAttack(move.configKey) && !requested) requested = move;
     }
 
-    // The hover, before anything else can have the body. It is advanced even
-    // when it is not up, because a mode that has just been left is still fading
-    // its pose out over the gait — and while it *is* up it takes the stick
-    // outright: nothing below this line can run, which is what makes flight the
-    // one ability that excludes every other one.
-    const flight = this.character.flight;
-    flight?.update(dt, this.speed);
-    if (flight?.flying) {
-      this._fly(dt, axis, running);
-      return;
-    }
-
     hop?.update(dt);
     if (jump) {
       jump.update(dt);
@@ -311,56 +299,6 @@ export class ThirdPersonController {
   }
 
   /**
-   * Fly the body.
-   *
-   * The same machine as the walk — camera-relative stick, integrated into the
-   * same velocity, turned toward where it is going — on three different
-   * numbers: faster, looser on both ends of the ramp, and slower to come round.
-   * That last one is most of what makes it *feel* like flight rather than like
-   * walking at altitude: a body with momentum in the air takes a moment to
-   * change its mind, and the bank that arrives with the turn (see
-   * `animation/Flight.js`) is drawn off exactly that lag.
-   *
-   * Two things the walk does are missing, and both are the point of being off
-   * the ground: nothing pushes the body out of the enemies it passes over, and
-   * the height is not written here at all — `Flight` resolves metres above the
-   * terrain and whoever owns the position adds it (see `App#frame`).
-   */
-  _fly(dt, axis, running) {
-    const config = settings.flight;
-    const azimuth = this.rig.azimuth;
-    const sin = Math.sin(azimuth);
-    const cos = Math.cos(azimuth);
-
-    // forward = -(sin, cos), right = (cos, -sin) — the camera basis, as above.
-    _desired.set(axis.y * -sin + axis.x * cos, axis.y * -cos + axis.x * -sin);
-    _desired.multiplyScalar(config.enabled ? (running ? config.boost : config.speed) : 0);
-
-    const rate = _desired.lengthSq() > 0 ? config.acceleration : config.deceleration;
-    _delta.copy(_desired).sub(this.velocity);
-    const step = rate * dt;
-    if (_delta.length() <= step) this.velocity.copy(_desired);
-    else this.velocity.addScaledVector(_delta.normalize(), step);
-
-    const position = this.character.position;
-    position.x += this.velocity.x * dt;
-    position.z += this.velocity.y * dt;
-
-    const speed = this.velocity.length();
-    if (speed > settings.locomotion.idleThreshold) {
-      this.character.turnToward(Math.atan2(this.velocity.x, this.velocity.y), config.turnRate, dt);
-    }
-
-    this.speed = damp(this.speed, speed, 0.0001, dt);
-    // The gait is fully masked by the hover's pose (`Flight#takeover`), so this
-    // is only what the blend is left resolving underneath — but it has to stay
-    // honest, because the frame the body lands is the frame it comes back.
-    this.character.locomotion?.setSpeed(
-      this.speed < settings.locomotion.idleThreshold ? 0 : this.speed
-    );
-  }
-
-  /**
    * Move the body along the jump's arc, and say whether it is still flying.
    *
    * The travel arrives in the *model's* frame, so it is turned by the body's
@@ -442,7 +380,6 @@ export class ThirdPersonController {
   reset() {
     this.character.jump?.cancel();
     this.character.hop?.cancel();
-    this.character.flight?.cancel();
     for (const move of this.character.attacks ?? []) move.cancel();
     this.aimYaw = null;
     this.velocity.set(0, 0);

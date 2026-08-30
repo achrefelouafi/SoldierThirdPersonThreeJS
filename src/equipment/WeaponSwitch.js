@@ -21,8 +21,8 @@ const STORAGE_KEY = 'character-equipment.weapon.v1';
  *  - The character screen can tune either of them without anything being
  *    loaded, unloaded or re-parented: switch, and the piece under the gizmo is
  *    the one now in the hand.
- *  - Anything that reads the loadout — `BladeStorm` forges its blades off the
- *    katana — goes on finding what it is looking for whatever is drawn.
+ *  - Anything that reads the loadout goes on finding what it is looking for
+ *    whatever is drawn.
  *
  * ## The exchange
  *

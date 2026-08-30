@@ -18,24 +18,6 @@ const stroke = (body) =>
   `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
 /**
- * A hooded body, filled, centred on `cx`. Used twice for the shadow pair.
- *
- * The two overlap, so the front one is cut out of the back one with a stroke in
- * the seal's own ground rather than drawn flush against it — at 26px a shared
- * edge is the difference between two figures and one blob.
- *
- * @param {string} [cut] ground colour to carve a gap with, if it is the front one
- */
-const figure = (cx, cut) => {
-  const carve = cut ? ` stroke="${cut}" stroke-width="1.5" stroke-linejoin="round"` : ' stroke="none"';
-  return (
-    `<circle cx="${cx}" cy="6.4" r="2.4" fill="currentColor"${carve}/>` +
-    `<path d="M${cx} 10.1c-2.8 0-4.6 2.5-4.9 5.9-.2 2.1 0 3.5.3 5h9.2` +
-    `c.3-1.5.5-2.9.3-5-.3-3.4-2.1-5.9-4.9-5.9z" fill="currentColor"${carve}/>`
-  );
-};
-
-/**
  * Icon markup by ability id.
  *
  * Keyed by the same `id` that names the settings block and the clip, so adding
@@ -149,28 +131,6 @@ export const ABILITY_ICONS = {
       `<path d="M16.4 10.6 20.8 11.2 20.4 13.9 16 13.4z" fill="currentColor" stroke="none"/>`
   ),
 
-  // Two of you: the one that goes, and the one that follows it out.
-  shadows: stroke(
-    `<g opacity="0.42">${figure(16)}</g>` + `<g>${figure(8.4, 'rgba(6, 8, 11, 0.92)')}</g>`
-  ),
-
-  // The seal seen edge-on, and what is coming through it. The arm is drawn and
-  // the fist is filled, because the whole move is about the weight on the end
-  // of it — an outline at this size reads as a glove.
-  judgement: stroke(
-    `<ellipse cx="12" cy="5.2" rx="8.4" ry="2.9"/>` +
-      `<ellipse cx="12" cy="5.2" rx="4.9" ry="1.6" stroke-dasharray="1.9 1.9" opacity="0.55"/>` +
-      `<path d="M9.8 6.8 8.7 12.6M14.2 6.8 15.3 12.6" opacity="0.85"/>` +
-      `<path d="M8.3 12.4h7.4c1 0 1.8.8 1.8 1.8l-.1 3.1c0 1.5-1.2 2.6-2.7 2.6H9.3` +
-      `c-1.5 0-2.7-1.1-2.7-2.6l-.1-3.1c0-1 .8-1.8 1.8-1.8z" fill="currentColor" stroke="none"/>` +
-      `<circle cx="6.6" cy="15.9" r="1.6" fill="currentColor" stroke="none"/>` +
-      // The knuckles, carved out of the mass rather than drawn on it.
-      `<path d="M10.3 16.8v2.5M12.7 16.8v2.5M15.1 16.8v2.2" ` +
-      `stroke="rgba(6, 8, 11, 0.92)" stroke-width="1.3"/>` +
-      // And what it did to the ground.
-      `<path d="M3.4 21.6 6 20.3M20.6 21.6 18 20.3" stroke-width="1.4" opacity="0.6"/>`
-  ),
-
   // The rune, and what came up out of it. Deliberately not the ascendance
   // glyph turned a different colour, which is the trap with two pillars in one
   // set: that one is a soft shaft standing in a flat disc with hoops round it,
@@ -197,27 +157,6 @@ export const ABILITY_ICONS = {
       `<path d="M3.9 10.4 4.6 11.6 3.9 12.8 3.2 11.6z" fill="currentColor" stroke="none" opacity="0.85"/>` +
       `<path d="M20.2 7.6 20.8 8.6 20.2 9.6 19.6 8.6z" fill="currentColor" stroke="none" opacity="0.6"/>` +
       `<path d="M5.6 5.4 6.1 6.2 5.6 7 5.1 6.2z" fill="currentColor" stroke="none" opacity="0.45"/>`
-  ),
-
-  // A body off the ground with the ring of blades around it. The figure is
-  // filled and the swords are outlines, because the halo is the part that has
-  // to read at 26px — a filled sword at this size is a smudge, and three
-  // tapering strokes at three angles are unmistakably a ring of them.
-  flight: stroke(
-    // The blades: two out to the sides, tips down, and one behind the head.
-    `<g opacity="0.9">` +
-      `<path d="M2.9 5.4 4.3 13.4" stroke-width="1.6"/><path d="M2 6.1 3.8 4.7" stroke-width="1.3"/>` +
-      `<path d="M21.1 5.4 19.7 13.4" stroke-width="1.6"/><path d="M22 6.1 20.2 4.7" stroke-width="1.3"/>` +
-      `<path d="M12 1.4v3.1" stroke-width="1.4" opacity="0.7"/>` +
-      `</g>` +
-      // The body, hanging.
-      `<circle cx="12" cy="8.2" r="2.2" fill="currentColor" stroke="none"/>` +
-      `<path d="M12 10.8c-2.3 0-3.6 1.9-3.8 4.3-.1 1.2 0 2 .2 2.8h7.2c.2-.8.3-1.6.2-2.8` +
-      `-.2-2.4-1.5-4.3-3.8-4.3z" fill="currentColor" stroke="none"/>` +
-      // The trailing legs — the one line that says the feet are not on anything.
-      `<path d="M10.4 17.9 8 21.4M13.6 17.9 16 21.4" stroke-width="1.6"/>` +
-      // And the air under it.
-      `<path d="M5.4 20.4h2.2M16.4 20.4h2.2" stroke-width="1.3" opacity="0.45"/>`
   ),
 
   // The column, wound, standing in its own circle. The only glyph in the set

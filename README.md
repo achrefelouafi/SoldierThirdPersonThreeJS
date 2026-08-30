@@ -2,7 +2,7 @@
 
 A complete third-person action stage in the browser: a rigged samurai on an
 endless procedural night landscape, with locomotion, motion-warped melee,
-summons, flight, ragdoll deaths and an equipment studio to dress the body in.
+ragdoll deaths and an equipment studio to dress the body in.
 
 No engine, no physics library, no asset pipeline. Three.js, Vite, and one file
 of settings that everything reads every frame.
@@ -20,13 +20,10 @@ npm run build
 | | |
 | --- | --- |
 | `WASD` / arrows | Move. `Shift` runs. |
-| `Space` | Leap — a running long jump, or an in-place hop at any lesser pace. In the air it looses the blades. |
+| `Space` | Leap — a running long jump, or an in-place hop at any lesser pace. |
 | `E` · `R` · `T` · `Q` | Kick · Slash Hit · Slide Cut · Flip Kick. |
 | `Z` | Sword Combo — throws two cuts across the ground at a body up to eleven metres off, then closes and takes it apart. |
-| `V` | Shadows — mark two bodies, and a shadow of you goes for each. |
-| `C` | Judgement — mark one body, and a fist comes down through a seal over its head. |
 | `B` | Unmaking — strikes twice at the nearest body: a rune into the ground under it, then a column of void up through it. Nothing is left to fall. |
-| `X` | Flight — leave the ground, mark bodies to forge a blade for each, `Space` looses them. |
 | `1` | Swap the weapon. The katana burns away and the rifle burns in, or the other way round. |
 | `Tab` | The equipment studio. |
 | click · mouse | Take the pointer, then move the mouse to turn the view. |
@@ -285,103 +282,6 @@ combination that stays legible against a blue night at twenty metres.
 
 ---
 
-## The three abilities
-
-All three are **aimed by marking a body first**, and the aim
-([TargetMarking](src/combat/TargetMarking.js)) is the same machine each time on
-its own block of settings. It is screen space, not world space, and that is the
-whole of it: a body is a candidate when it is near the point on screen the player
-is aiming at, and the nearest wins. The tolerance is a fraction of the screen's
-*height*, so this is a look rather than a pixel hunt.
-
-The aim point is the middle of the screen while the pointer is captured, which
-on the play stage it ordinarily is — the mouse turns the view rather than moving
-a cursor across it, so marking is looking at someone and clicking. With the
-cursor free it is the cursor instead, and the two are the same gesture rather
-than two: before it has moved it is already in the middle of the frame.
-
-### Shadows — `V`
-
-![Shadows](docs/media/shadows.jpg)
-
-Two clones of the rig — body, armour, weapon, everything hanging off a bone — with
-every material replaced by one black surface. Same silhouette, same frames: two
-more of *you*, standing where you are not.
-
-Each runs one errand and it is over. It is **born standing inside the character
-in its exact pose** (every cloned node's local transform copied off the node it
-was cloned from, so a turn or a gait blend lands on the shadow the same frame it
-lands on the body) and slides out to a mark beside it; it **crouches** there for
-a beat — the point of the whole summon is that two things step out of you, settle,
-take their mark, and *only then* move; it **hunts** one body each, never the same
-one twice; and it **strikes** with one of the player's own attacks, thrown with
-that move's numbers, so a shadow's slide cut takes a body apart exactly as yours
-does.
-
-Deliberately not the same *beat*, though: no hit-stop, and half the shake.
-Hit-stop is the player's own blow sold back to them, and freezing the world for a
-cut thrown thirty metres away by something that is not you reads as a stutter.
-
-### Judgement — `C`
-
-| The seal opens | The fist comes through |
-| --- | --- |
-| ![Seal](docs/media/judgement-seal.jpg) | ![Fist](docs/media/judgement-fist.jpg) |
-
-Six beats: the seal **writes itself** into the air over the mark, one full turn
-anticlockwise from the top; it **charges**, held, tightening and brightening
-while nothing else happens — the beat that makes the blow inevitable rather than
-sudden, and without it the whole move reads as a projectile; the fist **falls**,
-accelerating on `t²`, which is what a dropped thing actually does; it **lands**,
-and everything happens on that one frame — the body is felled, the world nearly
-stops, the lens is kicked, the ground opens and throws up what it is made of; it
-**dwells**, sitting on the result, because the cheapest way to make a blow feel
-heavy is to leave the thing that landed exactly where it stopped for half a
-second; and it **withdraws** back up through the seal, which folds.
-
-The trick the whole thing hangs on: a fist falling out of a circle is a prop
-unless the circle is a **hole**. So the fist's material discards every fragment
-above the seal's plane and burns a line where it crosses, and the forearm is
-stretched in the vertex shader so it always reaches that plane however high the
-seal was hung. What is on screen is never a floating arm — it is an arm coming
-through something, at any height, at any point in the drop, with no keyframes
-anywhere.
-
-### Flight — `X`
-
-| Marking from the air | The volley |
-| --- | --- |
-| ![Halo](docs/media/flight-halo.jpg) | ![Loose](docs/media/flight-loose.jpg) |
-
-The one ability that is a **mode** rather than a move, and the one that excludes
-the others. Taking off does three things at once, and they have to start together
-or it reads as three events: the body leaves the ground, the aim comes up so the
-very next click is a mark, and everything belonging to the ground is put away.
-
-While you are up there, every body you click forges a blade — the character's own
-katana, cloned out of whatever is actually equipped at that moment, wearing its
-own material and maps. It is the same sword the samurai is holding: same steel,
-same temper line, same wrap on the grip, lit by the same moon. What the summon
-adds is a fresnel rim and the threshold that writes it into the air in the first
-place. An object you recognise, with something happening to it, reads as *the
-sword doing something*; a replacement material reads as a prop that happens to be
-sword-shaped.
-
-Each blade **forges** (a threshold sweeping up the model with a ragged, noisy
-front — drawn rather than switched on), **holds** station in the turning halo and
-charges, **winds** back away from its mark on the loose, **strikes** through the
-body it was forged for, and **plants** itself in the ground behind the kill,
-ringing like a struck tuning fork before it burns back down the way it was
-written. They leave one at a time.
-
-The aim here **re-arms itself on every click**, because in this mode marking is
-what the player is *doing* rather than a mode they are in. `Space` looses;
-landing looses whatever is still hanging rather than dropping it, because the
-player marked those bodies and throwing the volley away on the way down would be
-taking it back.
-
----
-
 ## The equipment studio — `Tab`
 
 ![The studio](docs/media/studio.jpg)
@@ -540,9 +440,9 @@ something downstream reads what it wrote:
 1. **Terrain** — any slider moved this frame lands here, before anything reads a height.
 2. **Air, sky, moon** — one look, re-read together; the moon hangs itself on the light direction the sky has just resolved.
 3. **Controller** — movement first: it sets the heading and the speed the blend animates to. It only ever touches XZ, which is why the body can be dropped onto the ground without the controller knowing the ground exists.
-4. **Ground height + character** — the one place in the project that owns the body's height. Flight's hover is metres above *the ground*, so flying over a hill climbs it.
-5. **Enemies → target rings → marks** — a body felled this frame loses its ring and its mark on the same frame.
-6. **Equipment → shadows → judgement → blades** — each hangs off the final pose of the thing before it.
+4. **Ground height + character** — the one place in the project that owns the body's height: the body is stood on the terrain here, and nowhere else.
+5. **Enemies → target rings** — a body felled this frame loses its ring on the same frame.
+6. **Equipment → the body's own shade → boons → the thrown effects** — each hangs off the final pose of the thing before it.
 7. **Floor → ground fog → leaves** — the mist and the litter stand on the height-field bake the floor just refreshed.
 8. **Camera** — on *real* time, so orbiting stays responsive while paused.
 9. **Shadow map, grade, post.**
@@ -558,9 +458,9 @@ paths runs. Neither mode knows about the other.
 src/
   core/          renderer, clock, orbit rig, pointer lock, input, shared frame uniforms
   world/         terrain, floor, sky, moon, air, ground fog, leaves, lighting, the studio set
-  animation/     character rig, retargeting, locomotion, jump, flight, attacks
-  combat/        enemies, ragdoll, target marking
-  vfx/           shadows, judgement, blade storm, markers, blood
+  animation/     character rig, retargeting, locomotion, jump, attacks
+  combat/        enemies, ragdoll, gunplay
+  vfx/           the sword combo, boons, the void beam, markers, blood
   equipment/     catalog, lazy library, mount manager
   screens/       the character screen and its camera
   postprocessing/ bloom, tone map, grade

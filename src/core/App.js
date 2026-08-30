@@ -22,19 +22,15 @@ import { CharacterController } from '../animation/CharacterController.js';
 import { ThirdPersonController } from '../animation/ThirdPersonController.js';
 import { EnemyManager } from '../combat/EnemyManager.js';
 import { Gunplay } from '../combat/Gunplay.js';
-import { TargetMarking } from '../combat/TargetMarking.js';
 
 import { PostProcessing } from '../postprocessing/PostProcessing.js';
 import { BloodBurst } from '../vfx/BloodBurst.js';
-import { ShadowCharacter } from '../vfx/ShadowCharacter.js';
-import { Judgement } from '../vfx/Judgement.js';
 import { Ascendance } from '../vfx/Ascendance.js';
 import { ShadowBoost } from '../vfx/ShadowBoost.js';
-import { BladeStorm } from '../vfx/BladeStorm.js';
+import { ShadowDash } from '../vfx/ShadowDash.js';
 import { SwordCombo } from '../vfx/SwordCombo.js';
 import { RunicBeam } from '../vfx/RunicBeam.js';
 import { TargetRings } from '../vfx/TargetRings.js';
-import { TargetMarkers } from '../vfx/TargetMarkers.js';
 import { HealthBars } from '../vfx/HealthBars.js';
 import { CharacterScreen } from '../screens/CharacterScreen.js';
 import { findItem } from '../equipment/EquipmentCatalog.js';
@@ -217,29 +213,7 @@ export class App {
     this._hitStop = 0;
     this._hitStopScale = 1;
 
-    // The summons. They clone whatever is on the body at the moment they are
-    // called, so this only has to exist before `V` is pressed — it builds
-    // nothing until then, and nothing at all if the shadows are never used.
-    // They leave the body to hunt, so they need the ground to run over, the
-    // bodies to run at, and somewhere to send a landed foot.
-    this.shadows = new ShadowCharacter(this.character, {
-      terrain: this.terrain,
-      enemies: this.enemies,
-      onStrike: (enemy, x, z, force) => this._onShadowStrike(enemy, x, z, force)
-    });
-    this.scene.add(this.shadows.group);
-
-    // The other one that is aimed rather than swung: a seal over a marked body
-    // and a fist through it. Like the shadows it needs the ground it lands on,
-    // the bodies it lands among, and somewhere to send the blow.
-    this.judgement = new Judgement({
-      terrain: this.terrain,
-      enemies: this.enemies,
-      onStrike: (enemy, x, z, force) => this._onStrike(enemy, x, z, force)
-    });
-    this.scene.add(this.judgement.group);
-
-    // The fourth, and the odd one out: it is not aimed at anybody, it does not
+    // The odd one out: it is not aimed at anybody, it does not
     // hit anything, and what it leaves behind is ten seconds rather than a
     // corpse. It needs the ground for its circle to lie on and somewhere to
     // send the knock its arrival puts on the lens — nothing else, because
@@ -265,24 +239,11 @@ export class App {
     });
     this.scene.add(this.shadowBoost.group);
 
-    // The third of the summons, and the only one that is a *mode*: while `X` has the
-    // body in the air, every body marked forges a blade out of the weapon that
-    // is actually equipped and hangs it around the character until it is
-    // loosed. The equipment is asked for rather than held — the loadout does
-    // not exist yet, and the blade should be whatever is on the body at the
-    // moment one is forged.
-    this.blades = new BladeStorm({
-      terrain: this.terrain,
-      equipment: () => this.characterScreen?.equipment ?? null,
-      onStrike: (enemy, x, z, force) => this._onStrike(enemy, x, z, force)
-    });
-    this.scene.add(this.blades.group);
-
-    // Everything the three-hit combo (`Z`) throws. Unlike the three above it is
-    // not an ability and arms nothing: it is dressing for an ordinary attack,
-    // and it is here rather than inside that attack because `animation/Attack.js`
-    // knows only which frame a blow is on. What a blow *looks like* has never
-    // been its business.
+    // Everything the three-hit combo (`Z`) throws. Unlike the two above it arms
+    // nothing and decides nothing: it is dressing for an ordinary attack, and it
+    // is here rather than inside that attack because `animation/Attack.js` knows
+    // only which frame a blow is on. What a blow *looks like* has never been its
+    // business.
     //
     // `onWound` is the half of the move the animation cannot express: a thrown
     // cut takes time to arrive, so the first two beats are dealt on the frame
@@ -293,6 +254,17 @@ export class App {
     });
     this.scene.add(this.swordCombo.group);
 
+    // And the half of that move which happens on the *body* rather than out in
+    // front of it: for the four tenths of a second the dash is running, the
+    // character is a shade of itself rather than the character.
+    // It dresses whatever the body is wearing rather than drawing anything of
+    // its own, so it has nothing to add to the scene — and it is pointed at the
+    // combo's own attack in the frame loop, which is the only thing that says
+    // when a dash is happening.
+    this.shadowDash = new ShadowDash(this.character, {
+      config: () => settings.swordCombo.shadowDash
+    });
+
     // And everything the unmaking (`B`) calls up. On the same terms as the
     // combo and for the same reason: it is dressing for an ordinary attack
     // whose two beats happen not to be punches, and it arms nothing and decides
@@ -302,63 +274,12 @@ export class App {
     this.runicBeam = new RunicBeam({ terrain: this.terrain });
     this.scene.add(this.runicBeam.group);
 
-    // Who they are sent at. `V` and `Q` arm rather than casting: the body under
-    // the aim wears a diamond, a left click locks it, and the last lock is what
-    // hands the list over. Neither decides anything about the ability behind it
-    // and neither draws anything — both are wired here, from the two answers
-    // each of them holds.
-    //
-    // One instance per ability, on its own block of settings: the shadows want
-    // a pair and the fist wants one body, and a shared mode would have to be
-    // told which it was in the middle of every frame.
-    this.marking = new TargetMarking({
-      camera: this.camera,
-      enemies: this.enemies,
-      domElement: this.canvas,
-      config: () => settings.shadowCharacter.marking,
-      // The last lock is deliberately not announced — the pair stepping out of
-      // the body says it, and a line of text on top of that is noise.
-      onMark: (count, wanted) => {
-        if (count < wanted) this.toast.show(`Marked ${count} of ${wanted}`);
-      },
-      onCancel: () => this.toast.show('The mark fades'),
-      onComplete: (targets) => {
-        this.shadows.summon(targets);
-        this.toast.show('Two shadows step out and go for them');
-      }
-    });
-    this.judgeMarking = new TargetMarking({
-      camera: this.camera,
-      enemies: this.enemies,
-      domElement: this.canvas,
-      config: () => settings.judgement.marking,
-      onCancel: () => this.toast.show('The mark fades'),
-      onComplete: (targets) => {
-        if (this.judgement.cast(targets[0])) this.toast.show('Judgement — something reaches through');
-      }
-    });
-
-    // The third aim, and the one that behaves differently: it wants one body at
-    // a time and it re-arms itself the instant it has one, so marking from the
-    // air is something the player does *continuously* rather than a mode they
-    // enter and leave. It is armed by taking off and disarmed by landing.
-    this.flightMarking = new TargetMarking({
-      camera: this.camera,
-      enemies: this.enemies,
-      domElement: this.canvas,
-      config: () => settings.flight.marking,
-      onComplete: (targets) => this._forgeBlade(targets[0])
-    });
-
-    this.targetMarkers = new TargetMarkers();
-    this.scene.add(this.targetMarkers.mesh);
-
     // The shooter. Dormant until the rifle is the weapon in the hand, and from
     // that moment it owns four things nothing else does: where the lens sits,
     // where the reticle's ray lands, which way the torso points and what the
-    // trigger costs (`combat/Gunplay.js`). Like the blades it *asks* for the
-    // loadout rather than holding one — neither the weapons nor the gear exist
-    // until `load()` builds the character screen.
+    // trigger costs (`combat/Gunplay.js`). It *asks* for the loadout rather than
+    // holding one — neither the weapons nor the gear exist until `load()`
+    // builds the character screen.
     this.gunplay = new Gunplay({
       camera: this.camera,
       rig: this.rig,
@@ -369,17 +290,10 @@ export class App {
       weapons: () => this.characterScreen?.weapons ?? null,
       equipment: () => this.characterScreen?.equipment ?? null,
       look: this.pointerLook,
-      // Everything that wants the body or the ground back. The gun does not
-      // argue with any of them: it simply stands down and lets the lens come
-      // back off the shoulder. The pointer is not in that list any more — it
-      // belongs to the stage, and the marks are taken down the middle of the
-      // screen like everything else.
-      blocked: () =>
-        this.inCharacterScreen ||
-        this.character.flight?.active === true ||
-        this.marking.active ||
-        this.judgeMarking.active ||
-        this.flightMarking.active,
+      // The one thing that wants the body and the ground back. The gun does not
+      // argue with it: it simply stands down and lets the lens come back off the
+      // shoulder. The pointer is not in that list — it belongs to the stage.
+      blocked: () => this.inCharacterScreen,
       onBlood: (point, direction, count, speed) =>
         this.blood.emit(point, direction, count, speed),
       // A gun kill freezes the world too, and for the same reason a kick does —
@@ -397,15 +311,6 @@ export class App {
     // rifle is drawn and fades when it is put away (`vfx/HealthBars.js`).
     this.healthBars = new HealthBars();
     this.scene.add(this.healthBars.mesh);
-
-    /**
-     * Whoever is currently wearing a diamond, gathered once a frame.
-     *
-     * Two abilities can each be on their way to a body, and the markers take
-     * one list. Reused rather than rebuilt so a frame allocates nothing.
-     * @type {object[]}
-     */
-    this._marked = [];
 
     /**
      * A blow's force, with the boon's weight already in it.
@@ -439,7 +344,6 @@ export class App {
         this.enemies.respawnAll();
         this.toast.show('A fresh ring of them');
       },
-      onCastJudgement: () => this._castJudgement(),
       onCastAscendance: () => this._castAscendance(),
       onCastShadowBoost: () => this._castShadowBoost()
     });
@@ -514,48 +418,6 @@ export class App {
           this._swapShoulder();
           break;
         }
-        case 'KeyX': {
-          // Auto-repeat is the key still being held, not a second press — and
-          // this one is a toggle, so a held key would flip the mode thirty
-          // times a second.
-          if (this.inCharacterScreen || event.repeat) break;
-          this._toggleFlight();
-          break;
-        }
-        case 'Space': {
-          // Space is a jump on the ground and the loose in the air. The two
-          // never overlap — the controller refuses a jump while the body is
-          // flying — so one key can mean both without a modifier.
-          if (this.inCharacterScreen || event.repeat) break;
-          if (!this.character.flight?.flying) break;
-          event.preventDefault();
-          this._loose();
-          break;
-        }
-        case 'KeyV': {
-          // Not on the set: the shadows hunt on the play stage, and there is
-          // nothing in the studio for them to run at.
-          if (this.inCharacterScreen) break;
-          // Nor in the air: flight is the one ability that excludes the others,
-          // and a press that silently did nothing would read as a dropped key.
-          if (this._groundedOnly()) break;
-          // One key, three meanings, in the order they can be true: call the
-          // pair back, throw a half-taken mark away, or start taking one.
-          if (this.shadows.active) {
-            this.shadows.dismiss();
-            this.toast.show('The shadows burn away');
-          } else if (this.marking.active) {
-            this.marking.cancel();
-          } else {
-            // Only one arm at a time. There is one left button and it cannot be
-            // asked to mean two things, so the other mode goes quietly — the
-            // line below says which one is up now.
-            this.judgeMarking.end();
-            const wanted = this.marking.begin();
-            this.toast.show(`Look at a body and click to mark it — ${wanted} of them`);
-          }
-          break;
-        }
         case 'KeyN': {
           // One of the two abilities with nothing to aim, so it is one of the
           // two a single press casts outright. Held down it would try again
@@ -570,39 +432,13 @@ export class App {
           this._castShadowBoost();
           break;
         }
-        case 'KeyC': {
-          if (this.inCharacterScreen) break;
-          if (this._groundedOnly()) break;
-          // The same three meanings, except that the middle one is missing: a
-          // fist already on its way through cannot be called back, and the
-          // press says so rather than being swallowed.
-          if (this.judgement.active) {
-            this.toast.show('It is already coming down');
-          } else if (this.judgeMarking.active) {
-            this.judgeMarking.cancel();
-          } else {
-            this.marking.end();
-            this.judgeMarking.begin();
-            this.toast.show('Look at a body and click to call it down on');
-          }
-          break;
-        }
         case 'Escape':
           // The pointer first, whatever else this press means. The browser
           // gives it back on `Esc` on its own — and swallows the `keydown`
           // while doing so, which is why this is here for the case where it
           // does not rather than as the way it usually happens.
           this.pointerLook.release();
-          if (this.inCharacterScreen) {
-            this.characterScreen.exit();
-          } else if (this.character.flight?.active) {
-            // Escape is the way out of anything, and in the air the thing to be
-            // got out of is the mode itself.
-            this._toggleFlight();
-          } else {
-            this.marking.cancel();
-            this.judgeMarking.cancel();
-          }
+          if (this.inCharacterScreen) this.characterScreen.exit();
           break;
         default:
           break;
@@ -741,104 +577,6 @@ export class App {
   }
 
   /**
-   * Refuse a ground ability while the body is in the air, and say so.
-   *
-   * Flight is the one ability that excludes the rest, and this is where that
-   * rule actually lives — every other key handler asks it first. A press that
-   * did nothing at all would read as a dropped input, so it costs a line of
-   * text rather than silence.
-   *
-   * @returns {boolean} whether the press should be swallowed
-   */
-  _groundedOnly() {
-    if (!this.character.flight?.active) return false;
-    this.toast.show('Not from up here — X to come down first');
-    return true;
-  }
-
-  /**
-   * Take off, or land.
-   *
-   * The mode is three things starting at once and they have to start together
-   * or it reads as three separate events: the body leaves the ground, the aim
-   * comes up (so the very next click is a mark), and everything that belongs to
-   * the ground is put away — a summon mid-hunt, a fist mid-fall, a half-taken
-   * mark. Landing is the same in reverse, except that anything still hanging in
-   * the halo is *loosed* rather than dropped: the player marked those bodies,
-   * and throwing the volley away on the way down would be taking it back.
-   */
-  _toggleFlight() {
-    const flight = this.character.flight;
-    if (!flight?.available) {
-      this.toast.show('The float clip did not load — flight is unavailable');
-      return;
-    }
-
-    if (flight.active) {
-      flight.stop();
-      this.flightMarking.end();
-      const loosed = this.blades.launch();
-      this.toast.show(
-        loosed > 0
-          ? `Coming down — ${loosed} ${loosed === 1 ? 'blade goes' : 'blades go'} with you`
-          : 'Coming down'
-      );
-      return;
-    }
-
-    if (!settings.flight.enabled) {
-      this.toast.show('Flight is switched off in the editor');
-      return;
-    }
-
-    // The ground's abilities do not come along. Anything mid-cast is sent away
-    // the same way entering the studio sends it away, and both marks go
-    // silently — the line below is what the press has to say.
-    this.marking.end();
-    this.judgeMarking.end();
-    this.shadows.dismiss();
-    this.judgement.dismiss();
-    this.targetRings.clear();
-    this.targetHotkeys.clear();
-    // And anything the *body* is in the middle of. The controller stops
-    // advancing the jumps and the attacks the moment flight has the stick
-    // (`ThirdPersonController#update`), so a swing left running would be frozen
-    // mid-pose and would still be holding the body when the feet came back down.
-    this.character.jump?.cancel();
-    this.character.hop?.cancel();
-    for (const move of this.character.attacks ?? []) move.cancel();
-
-    flight.start();
-    this.flightMarking.begin();
-    this.toast.show('Airborne — click a body to forge a blade for it · Space looses them');
-  }
-
-  /**
-   * A body was marked from the air.
-   *
-   * The aim re-arms itself immediately whatever the answer was, because in this
-   * mode marking is the thing the player is *doing* rather than a mode they are
-   * in — the click that fills the last slot should leave them able to click
-   * again the moment one comes free.
-   */
-  _forgeBlade(enemy) {
-    const result = this.blades.mark(enemy);
-    if (result === 'full') this.toast.show('The ring is full — Space');
-    else if (result === 'unavailable') this.toast.show('Nothing to forge a blade from');
-    // A duplicate is a mis-click on a body that already has one coming, and
-    // saying so every time would be noise.
-
-    if (this.character.flight?.flying) this.flightMarking.begin();
-  }
-
-  /** Loose whatever is hanging, and say what went. */
-  _loose() {
-    const sent = this.blades.launch();
-    if (sent > 0) this.toast.show(`${sent} away`);
-    else this.toast.show('Nothing hanging — click a body first');
-  }
-
-  /**
    * Swap between the play stage and the equipment studio.
    *
    * Everything mode-dependent is resolved from `inCharacterScreen` in `frame()`,
@@ -857,30 +595,23 @@ export class App {
     }
 
     screen.enter();
-    // The summons belong to the play stage — they stand in the world, not on
-    // the body, so they cannot come along. Anything mid-hunt is sent away, and
-    // so is anything mid-fall: the seal hangs over a body that is not in this
-    // scene either.
-    this.shadows.dismiss({ immediate: true });
-    this.judgement.dismiss({ immediate: true });
-    // And the boon, which is the one of the four that is standing *on* the body
-    // rather than out in the world — and is therefore the one that would come
-    // along. It must not: a column of light twenty-six metres tall is not a
-    // thing to judge a pauldron against.
+    // The boon stands *on* the body rather than out in the world, and is
+    // therefore the one thing that would come along. It must not: a column of
+    // light twenty-six metres tall is not a thing to judge a pauldron against.
     this.ascendance.dismiss({ immediate: true });
     // And the other one, for the same reason and rather more so: a column of
     // shadow standing on the turntable would not only compete with the
     // pauldron being judged, it would be *darkening* it.
     this.shadowBoost.dismiss({ immediate: true });
-    // And the halo, along with the mode that raised it: the body is about to be
-    // stood on a turntable indoors, and it cannot be hovering when it gets there.
-    this.character.flight?.cancel();
-    this.flightMarking.end();
-    this.blades.dismiss({ immediate: true });
     // And any cut still in the air. Nothing it was thrown at exists on the set,
     // and a crescent left crossing an empty stage would be the first thing the
     // studio's lens found.
     this.swordCombo.clear();
+    // And the shade off the body, which is the one thing the combo leaves
+    // *on* the character: the studio has its own update path, so a dash
+    // interrupted by the screen would leave the body half burnt away and
+    // nothing would ever finish putting it back.
+    this.shadowDash.clear();
     // And the beam, along with the rune under it. Both are struck into ground
     // that does not exist on the set, and a column of void standing in an
     // equipment studio is not a look anybody asked for.
@@ -892,13 +623,8 @@ export class App {
     this.character.rifle?.cancel();
     // Nothing to be in reach of on the set, and the rings are not simulated
     // while it is up — so they come off now rather than being left mid-fade.
-    // The marks go the same way, silently: the toast below is what the screen
-    // has to say, and "the mark fades" over the top of it would be noise.
-    this.marking.end();
-    this.judgeMarking.end();
     this.targetRings.clear();
     this.targetHotkeys.clear();
-    this.targetMarkers.clear();
     this.healthBars.clear();
     // And the pointer, which the stage captures. The studio is a place you
     // point at things with a cursor, and the frame loop returns before
@@ -1119,24 +845,6 @@ export class App {
   }
 
   /**
-   * A *shadow's* blow landed on someone.
-   *
-   * The same kill on the same terms as the player's — the force comes from the
-   * move the shadow threw, so its slide cut takes a body apart exactly as the
-   * player's does. Deliberately not the same *beat*, though: no hit-stop, and
-   * half the shake. Hit-stop is the player's own blow being sold back to them,
-   * and freezing the world for a cut thrown thirty metres away by something
-   * that is not you reads as a stutter. The knock on the lens stays, because it
-   * is the only thing that says the hit happened when it is out of frame.
-   *
-   * @param {object} force the striking move's settings block
-   */
-  _onShadowStrike(enemy, x, z, force = settings.kick) {
-    if (!this.enemies.kill(enemy, x, z, force)) return;
-    this.rig.shake(force.shake * 0.5);
-  }
-
-  /**
    * Light a ring under whoever a press would land on, and say which press.
    *
    * The question is asked one move at a time, and it is the move's *own*
@@ -1176,15 +884,6 @@ export class App {
     locked.clear();
     ready.clear();
 
-    // Nothing on the ground can be reached from the air, so nothing on the
-    // ground is lit: the rings and the caps go out with the take-off rather
-    // than hanging under bodies no key would take.
-    if (this.character.flight?.active) {
-      this.targetRings.update(dt, locked, this.elapsed);
-      this.targetHotkeys.update(dt, locked, ready);
-      return;
-    }
-
     const facing = this.character.facing;
     for (const move of this.character.attacks ?? []) {
       if (!move.available || !move.config.enabled) continue;
@@ -1209,57 +908,6 @@ export class App {
   }
 
   /**
-   * Resolve the aim, take any click on it, and draw the diamonds.
-   *
-   * Either marking pass may cast from inside here (its `onComplete`), which is
-   * why this runs before `shadows.update` and `judgement.update` rather than
-   * after: the last lock and the thing it called are the same frame, not two.
-   *
-   * The markers outlive the mode on purpose. While an arm is up they follow
-   * what the player is choosing; once it is spent they follow what is on its
-   * way — so a lock stays on the body it was taken on until the shadow sent for
-   * it arrives, or until the fist lands on it.
-   *
-   * Only one of the two modes can be armed at a time (see the key handlers), so
-   * there is only ever one hover to draw; but both abilities can be out at once,
-   * and the bodies they are on their way to are gathered together.
-   *
-   * @param {number} dt
-   * @param {import('three').Vector3} position
-   */
-  _updateMarks(dt, position) {
-    this.marking.update(dt, position);
-    this.judgeMarking.update(dt, position);
-    this.flightMarking.update(dt, position);
-
-    const aiming = this.marking.active
-      ? this.marking
-      : this.judgeMarking.active
-        ? this.judgeMarking
-        : this.flightMarking.active
-          ? this.flightMarking
-          : null;
-
-    const marked = this._marked;
-    marked.length = 0;
-    if (aiming) {
-      for (const enemy of aiming.marks) marked.push(enemy);
-    } else {
-      for (const enemy of this.shadows.assignments) marked.push(enemy);
-      for (const enemy of this.judgement.assignments) marked.push(enemy);
-    }
-    // The halo's marks are gathered whether or not an aim is up, and they have
-    // to be: the flight aim re-arms itself on every click, so it is *always*
-    // up, and a blade already forged for a body would otherwise lose the marker
-    // the click that forged it put there.
-    for (const enemy of this.blades.assignments) {
-      if (!marked.includes(enemy)) marked.push(enemy);
-    }
-
-    this.targetMarkers.update(dt, aiming?.hovered ?? null, marked, this.elapsed);
-  }
-
-  /**
    * Say which moves the player can reach right now.
    *
    * Every answer is asked of the thing that owns it — the moves' own
@@ -1279,23 +927,13 @@ export class App {
   _syncAbilities() {
     const jump = this.character.jump;
     const hop = this.character.hop;
-    const flight = this.character.flight;
-    // The one state that changes what every other one means. While it is up the
-    // row goes dark except for its own chip, which is the HUD saying out loud
-    // what the key handlers enforce: this ability excludes the rest.
-    const airborne = flight?.active === true;
     const state = {
       leap:
-        airborne
-          ? 'off'
-          : jump?.locked || hop?.locked
-            ? 'active'
-            : jump?.canStart(this.controller.speed, this.input.running) || hop?.canStart()
-              ? 'ready'
-              : 'off',
-      // Lit from the take-off to the landing, and never merely `ready` in
-      // between: there is no half of this mode.
-      flight: airborne ? 'active' : flight?.available && settings.flight.enabled ? 'ready' : 'off',
+        jump?.locked || hop?.locked
+          ? 'active'
+          : jump?.canStart(this.controller.speed, this.input.running) || hop?.canStart()
+            ? 'ready'
+            : 'off',
       // Always open, and never `active`: the studio hides this row while it is
       // up (`body.cs-open .hud`), so the only state it can be seen in is ready.
       customize: 'ready',
@@ -1306,44 +944,23 @@ export class App {
       // work but nothing on screen would change: the setting is real with the
       // sword out, and the lens is simply not on a shoulder to be crossed.
       shoulder: this.gunplay.active ? 'active' : 'off',
-      // Lit from the moment `V` arms the mark, not from the moment the pair
-      // steps out: the key has been spent either way, and the chip is what says
-      // the next press means something else.
-      shadows: airborne
-        ? 'off'
-        : this.shadows.active || this.marking.active
-          ? 'active'
-          : 'ready',
-      // The same, and `off` while the fist is actually through — that is the
-      // one window in which the key genuinely does nothing.
-      judgement: airborne || this.judgement.active
-        ? 'off'
-        : this.judgeMarking.active
-          ? 'active'
-          : settings.judgement.enabled
-            ? 'ready'
-            : 'off',
       // Lit for the whole of it — the gather, the descent and the ten seconds —
       // because from the player's side those are one thing that is happening.
       // The chip's *name* is what separates them: it counts the boon down and
       // says nothing at all while the light is still on its way.
-      ascendance: airborne
-        ? 'off'
-        : this.ascendance.active
-          ? 'active'
-          : settings.ascendance.enabled
-            ? 'ready'
-            : 'off',
+      ascendance: this.ascendance.active
+        ? 'active'
+        : settings.ascendance.enabled
+          ? 'ready'
+          : 'off',
       // And its opposite, on exactly the same rules: lit for the gather, the
       // eruption and the seconds after, because from the player's side those
       // are one thing that is happening.
-      shadowBoost: airborne
-        ? 'off'
-        : this.shadowBoost.active
-          ? 'active'
-          : settings.shadowBoost.enabled
-            ? 'ready'
-            : 'off'
+      shadowBoost: this.shadowBoost.active
+        ? 'active'
+        : settings.shadowBoost.enabled
+          ? 'ready'
+          : 'off'
     };
 
     // The two chips that name a value rather than a move: what is in the hand,
@@ -1371,39 +988,12 @@ export class App {
     for (const move of this.character.attacks ?? []) {
       state[move.configKey] = move.locked
         ? 'active'
-        : !airborne && this._readyMoves.has(move.configKey)
+        : this._readyMoves.has(move.configKey)
           ? 'ready'
           : 'off';
     }
 
     this.actionHUD.update(state);
-  }
-
-  /**
-   * Call the fist down on whoever is nearest, skipping the mark.
-   *
-   * The editor's way in, so the effect can be dialled without aiming it forty
-   * times. It is the same cast the last lock makes — the only thing missing is
-   * the choice, which is not what anyone is tuning at that moment.
-   */
-  _castJudgement() {
-    const position = this.character.position;
-    let best = null;
-    let bestDistance = Infinity;
-
-    for (const enemy of this.enemies.enemies) {
-      if (!enemy.alive) continue;
-      const dx = enemy.position.x - position.x;
-      const dz = enemy.position.z - position.z;
-      const distance = dx * dx + dz * dz;
-      if (distance >= bestDistance) continue;
-      bestDistance = distance;
-      best = enemy;
-    }
-
-    if (!best) this.toast.show('Nothing standing to call it down on');
-    else if (!this.judgement.cast(best)) this.toast.show('It is already coming down');
-    else this.toast.show('Judgement — something reaches through');
   }
 
   /** However the screen was closed, the play stage comes back here. */
@@ -1466,13 +1056,6 @@ export class App {
     // Stood up now rather than on the first frame, so their materials are in
     // the scene for the shader warm-up below.
     this.enemies.respawnAll();
-
-    this.loading.setProgress(0.76, 'Forging the fist…');
-    // The arm the ability drops. It is in the scene from here on, hidden, so
-    // its material is compiled with everything else below rather than on the
-    // frame it is first called for. A failure costs a warning and an ability
-    // that does nothing — see `Judgement#load`.
-    await this.judgement.load(assets);
 
     this.loading.setProgress(0.8, 'Building the character screen…');
     // The set and its rig cost nothing until they are drawn, and building them
@@ -1577,9 +1160,6 @@ export class App {
     if (this.inCharacterScreen) {
       // The play stage is not simulated while the studio is up: its lights,
       // floor and mist are not on screen, and the body is not standing on it.
-      // The shadows are not updated here at all: they stand in the world and
-      // hunt bodies that only exist on the play stage, so entering the studio
-      // sends them away (`toggleCharacterScreen`).
       this.characterScreen.update(dt, raw);
 
       gl.shadowMap.needsUpdate = true;
@@ -1620,12 +1200,7 @@ export class App {
     // height throughout and a leap over a valley still lands on the far side.
     const position = this.character.position;
     const groundY = this.terrain.heightAt(position.x, position.z);
-    // The hover is metres above *the ground*, resolved by `Flight` and added
-    // here, which is the one place in the project that owns the body's height.
-    // Held against the terrain rather than against an absolute altitude, so
-    // flying over a hill climbs it and the camera is never buried by a slope.
-    const lift = this.character.flight?.lift ?? 0;
-    position.y = groundY + lift;
+    position.y = groundY;
     this.character.update(dt);
 
     // Before the bodies, not after: a blow landing this frame emits into this,
@@ -1641,9 +1216,6 @@ export class App {
     // After them, so a body that has just been felled or has just walked out of
     // the cone loses its ring on the same frame it stops being a target.
     this._updateTargetRings(dt, position);
-    // And who the shadows would be sent at. After the bodies for the same
-    // reason: a marked body felled this frame drops its mark on this frame.
-    this._updateMarks(dt, position);
     // And what is left of each of them, while the gun is out. After the bodies
     // for the third time and the same reason: one felled this frame must not
     // still be wearing a bar on it.
@@ -1666,21 +1238,16 @@ export class App {
     // the player's, not the world's: a hit-stop must not hold a muzzle flash on
     // screen for three times its life.
     this.gunplay.update(dt, raw);
-    // Last of the body's followers: the mounts have their final scale and the
-    // skeleton its final pose, which is exactly what a shadow steps out of. On
-    // the *simulation's* clock, not the real one — a summon that is out there
-    // hunting is combat, so it slows with the hit-stop and stops with `P`.
-    this.shadows.update(dt);
-    // And the fist, on the same clock and for the same reason — it *causes* the
-    // hit-stop it then hangs in, which is most of why the blow lands as hard as
-    // it does.
-    this.judgement.update(dt, this.elapsed);
+    // The body's own shade, last of the body's followers: the mounts have their
+    // final scale and the skeleton its final pose, and it reads the combo's clip
+    // clock, which `controller.update` advanced at the top of the frame. On the
+    // simulation's clock like the rest of the move — the return runs straight
+    // through the finisher's hit-stop and is meant to slow with it, so the
+    // character comes back *into* the blow.
+    this.shadowDash.update(dt, this.character.swordCombo);
     // And the boon, which is the only one of them that is standing on the body:
     // it is handed where the feet are every frame, so the column travels with
-    // the character rather than being left where it was cast. Deliberately not
-    // dismissed by taking off — flight excludes the abilities that are *cast*,
-    // and a boon already paid for should not be confiscated for leaving the
-    // ground. The shaft is tall enough that the body is still inside it.
+    // the character rather than being left where it was cast.
     this.ascendance.update(dt, this.elapsed, position, groundY, this.character.height);
     // And the other boon, immediately after it and on the same clock, for every
     // reason the line above gives: it stands on the body, it travels with it,
@@ -1688,10 +1255,6 @@ export class App {
     // heavier. The two are independent all the way down — the only place they
     // meet is `_might`.
     this.shadowBoost.update(dt, this.elapsed, position, groundY, this.character.height);
-    // And the halo, last of the three: it hangs off the body's *final* position
-    // for this frame, so the ring never lags a frame behind the character it is
-    // supposed to be orbiting.
-    this.blades.update(dt, this.elapsed, position, this.character.height);
     // And the combo's cuts, on the same clock as everything else the player
     // threw: a crescent still crossing the ground when the finisher lands slows
     // with the hit-stop that finisher caused, which is the only way the three
@@ -1718,10 +1281,7 @@ export class App {
 
     /* ---- camera ---- */
     // The rig runs on *real* time so orbiting stays responsive while paused.
-    // The anchor takes the hover with it — the rig damps toward it, so the
-    // climb is a camera move rather than a jump cut, and the body stays framed
-    // at any altitude.
-    this.rig.setAnchor(position.x, groundY + lift, position.z);
+    this.rig.setAnchor(position.x, groundY, position.z);
     this.rig.update(raw);
 
     this.contactShadows.setPosition(position.x, position.z, groundY);
@@ -1742,19 +1302,13 @@ export class App {
     this.input.dispose();
     this.pointerLook.dispose();
     this.gunplay.dispose();
-    this.shadows.dispose();
-    this.judgement.dispose();
     this.ascendance.dispose();
     this.shadowBoost.dispose();
-    this.blades.dispose();
     this.swordCombo.dispose();
+    this.shadowDash.dispose();
     this.runicBeam.dispose();
-    this.marking.dispose();
-    this.judgeMarking.dispose();
-    this.flightMarking.dispose();
     this.targetRings.dispose();
     this.targetHotkeys.dispose();
-    this.targetMarkers.dispose();
     this.healthBars.dispose();
     this.enemies.dispose();
     this.blood.dispose();

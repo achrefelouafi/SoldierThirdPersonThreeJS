@@ -37,14 +37,14 @@ export const CATEGORIES = {
    * a way to hurt anyone, and neither should compete with the panels that are.
    */
   movement: { id: 'movement', label: 'Movement', kanji: '歩', row: 'top' },
-  /** Sword and body. The four the fight is actually fought with. */
+  /** Sword and body. The three the fight is actually fought with. */
   technique: { id: 'technique', label: 'Techniques', kanji: '技', row: 'main' },
   /**
    * The rarer things — asking for something rather than doing it.
    *
-   * Three of them are aimed by marking a body first; the fourth (`voidBeam`) is
-   * thrown at whoever is in front of you like a technique is, because what
-   * makes a move an ability here is *what it calls on*, not how it is aimed.
+   * Two of them (`swordCombo`, `voidBeam`) are thrown at whoever is in front of
+   * you exactly as a technique is, because what makes a move an ability here is
+   * *what it calls on*, not how it is aimed.
    */
   ability: { id: 'ability', label: 'Abilities', kanji: '術', row: 'main' }
 };
@@ -135,20 +135,6 @@ export const ABILITIES = [
     attack: true
   },
   {
-    id: 'swordCombo',
-    category: 'technique',
-    label: 'Sword Combo',
-    // Not `F`: that toggles the frame stats (`App`'s own key handler), and a
-    // technique that flipped a debug panel every time it was thrown would be
-    // the kind of bug nobody reports because they assume they did it.
-    hotkey: 'Z',
-    code: 'KeyZ',
-    note:
-      'Throws two cuts across the ground at it, then closes and takes it apart. ' +
-      'The longest reach of the four, and the longest you are committed for.',
-    attack: true
-  },
-  {
     id: 'flipKick',
     category: 'technique',
     label: 'Flip Kick',
@@ -158,20 +144,18 @@ export const ABILITIES = [
     attack: true
   },
   {
-    id: 'shadows',
+    id: 'swordCombo',
     category: 'ability',
-    label: 'Shadows',
-    hotkey: 'V',
-    code: 'KeyV',
-    note: 'Look at two bodies and click to mark them. A shadow of you goes for each.'
-  },
-  {
-    id: 'judgement',
-    category: 'ability',
-    label: 'Judgement',
-    hotkey: 'C',
-    code: 'KeyC',
-    note: 'Mark one body. A seal opens over its head and a fist comes down through it.'
+    label: 'Sword Combo',
+    // Not `F`: that toggles the frame stats (`App`'s own key handler), and a
+    // move that flipped a debug panel every time it was thrown would be the
+    // kind of bug nobody reports because they assume they did it.
+    hotkey: 'Z',
+    code: 'KeyZ',
+    note:
+      'Throws two cuts across the ground at it, then closes out of the dark and ' +
+      'takes it apart. The longest reach of them, and the longest you are committed for.',
+    attack: true
   },
   {
     id: 'voidBeam',
@@ -186,24 +170,14 @@ export const ABILITIES = [
     attack: true
   },
   {
-    id: 'flight',
-    category: 'ability',
-    label: 'Flight',
-    hotkey: 'X',
-    code: 'KeyX',
-    note:
-      'Leave the ground. Click bodies to forge a blade for each, Space looses them — ' +
-      'and nothing else works while you are up there.'
-  },
-  {
     id: 'ascendance',
     category: 'ability',
     // Rewritten each frame while the boon is up with the seconds left on it,
     // so the chip is the timer as well as the key — see `App#_syncAbilities`.
     label: 'Ascendance',
-    // The next cap along from the four the abilities already hold — X, C, V and
-    // B are taken, and a fifth on the same row is one the hand finds without
-    // being told where it is.
+    // The next cap along from the ones the abilities already hold — B is taken,
+    // and this one is on the same row, where the hand finds it without being
+    // told where it is.
     hotkey: 'N',
     code: 'KeyN',
     note:
@@ -220,8 +194,8 @@ export const ABILITIES = [
     // Rewritten each frame while the boon is up with the seconds left on it,
     // exactly as `ascendance` is — see `App#_syncAbilities`.
     label: 'Shadow Boost',
-    // The next cap along again. X, C, V, B and N are taken, and M finishes the
-    // row the hand is already on.
+    // The next cap along again. B and N are taken, and M finishes the row the
+    // hand is already on.
     hotkey: 'M',
     code: 'KeyM',
     note:

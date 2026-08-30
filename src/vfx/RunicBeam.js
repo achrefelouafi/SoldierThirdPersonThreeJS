@@ -49,13 +49,12 @@ const _at = new Vector3();
  * ## What it is, and why it is not another burst
  *
  * Every other thing the player throws is an *event* — a crescent that crosses
- * the ground, a fist that comes down, a sphere torn open on a contact point.
- * All of them are over in half a second, and all of them are read as the moment
+ * the ground, a sphere torn open on a contact point. All of them are over in
+ * half a second, and all of them are read as the moment
  * they happened. This is the opposite: a column standing in the world for the
  * better part of two seconds with a body burning away inside it. The pacing is
- * the whole point, and it is why this is a small state machine like
- * `vfx/Judgement.js` rather than a pooled emitter like `vfx/RiftBurst.js` —
- * there is only ever one of these, and what matters about it is the order its
+ * the whole point, and it is why this is a small state machine rather than a
+ * pooled emitter like `vfx/RiftBurst.js` — there is only ever one of these, and what matters about it is the order its
  * beats arrive in.
  *
  * ## The five layers
@@ -65,11 +64,11 @@ const _at = new Vector3();
  * other four — which is the only sane way to tune a stack of additive light.
  *
  * 1. **The runes.** `vfx/SummonSeal.js`, unchanged, laid flat on the ground
- *    under the mark instead of hung overhead. It is the same circle the
- *    judgement opens and it is deliberately the same circle: the two abilities
- *    reach into the same place, and a second, differently-drawn seal would say
- *    they do not. It writes itself anticlockwise from the top over `open`, so
- *    the pattern *arrives* rather than fading up.
+ *    under the mark. It is the same circle the light's own seal is drawn with,
+ *    and deliberately so: the two abilities reach into the same place, and a
+ *    second, differently-drawn seal would say they do not. It writes itself
+ *    anticlockwise from the top over `open`, so the pattern *arrives* rather
+ *    than fading up.
  *
  * 2. **The beam.** An open cylinder drawn on its own *middle* rather than its
  *    rim — `pow(facing, k)`, which is the inverse of the fresnel a shell wants:
@@ -120,8 +119,8 @@ export class RunicBeam {
     this.group = new Group();
     this.group.name = 'RunicBeam';
 
-    // Grounded, unlike the judgement's: this circle is struck into the floor at
-    // somebody's feet rather than hung in the air over their head, so it is
+    // Grounded: this circle is struck into the floor at somebody's feet
+    // rather than hung in the air over their head, so it is
     // subdivided and every vertex is dropped onto the height field. Without
     // that it is buried on the uphill side of the first slope it opens on.
     this.seal = new SummonSeal({ terrain });
