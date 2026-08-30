@@ -83,6 +83,18 @@ export const ABILITY_ICONS = {
       `<path d="M5.6 12.1h1.8M16.6 12.1h1.8" stroke-width="1.4" opacity="0.45"/>`
   ),
 
+  // The lens crossing behind the body: the figure on its own axis, a lens
+  // either side of it, and the arc the camera travels between the two. Drawn
+  // symmetrically on purpose — the chip's own label says which side it is on
+  // now, and a glyph that also tried to would be two answers to one question.
+  shoulder: stroke(
+    `<path d="M12 4.6v14.8" opacity="0.5"/>` +
+      `<circle cx="4.6" cy="16.4" r="2.5"/>` +
+      `<circle cx="19.4" cy="16.4" r="2.5"/>` +
+      `<path d="M5.6 11.2a8.2 8.2 0 0 1 12.8 0" opacity="0.8"/>` +
+      `<path d="M15.9 9.6 18.6 11.4 17.2 14.1" opacity="0.8"/>`
+  ),
+
   // The leg, hip to knee to ankle to toe, with the impact thrown off the toe.
   // The hip is a dot and the foot a wedge: without them the joints read as a
   // tick mark rather than as a limb coming out of a body.

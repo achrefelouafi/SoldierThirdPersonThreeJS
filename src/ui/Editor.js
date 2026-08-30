@@ -44,6 +44,7 @@ export class Editor {
     this._buildCharacter();
     this._buildLocomotion();
     this._buildWeapons();
+    this._buildGunplay();
     this._buildCombat();
     this._buildStudio();
 
@@ -1221,6 +1222,133 @@ export class Editor {
     // 1 is a clean line travelling the length of the piece; 0 is static eating
     // it from everywhere at once.
     R(mask, w, 'rise', 0, 1, 0.01, 'burn along piece');
+  }
+
+  /**
+   * The shooter, in the order the numbers are actually reached for.
+   *
+   * The lens first, because where the camera stands is the whole mode; then the
+   * body, because a torso that will not come round far enough is the next thing
+   * anyone notices; then the gun; then what it costs to be hit. The look — the
+   * tracer, the flash, the sparks — is last, on the grounds that nobody tunes a
+   * muzzle flash before they have decided how the gun handles.
+   */
+  _buildGunplay() {
+    const folder = this.gui.addFolder('Gunplay (the rifle)');
+    const g = settings.gunplay;
+    const R = Editor.range;
+
+    folder.add(g, 'enabled').name('enabled');
+    // The key and the middle mouse button both write this, so it listens.
+    folder.add(g, 'shoulder', { Left: -1, Right: 1 }).name('shoulder').listen();
+
+    const lens = folder.addFolder('The lens');
+    const c = g.camera;
+    // The number the whole mode stands on: with it at 0 the body is in front of
+    // its own aim and there is nowhere honest to put a reticle.
+    R(lens, c, 'offset', 0, 1.6, 0.01, 'off the axis (m)');
+    R(lens, c, 'rise', -0.4, 0.4, 0.01, 'rise (m)');
+    R(lens, c, 'distance', 0.8, 6, 0.05, 'distance (m)');
+    R(lens, c, 'targetHeight', 0.6, 2.4, 0.01, 'looks at (m)');
+    R(lens, c, 'fov', 25, 80, 0.5, 'field of view');
+    R(lens, c, 'blend', 0.00001, 0.02, 0.00001, 'comes up over');
+    R(lens, c, 'sensitivity', 0.0004, 0.008, 0.0001, 'mouse (rad/px)');
+
+    const sights = lens.addFolder('Down the sights');
+    R(sights, c, 'adsOffset', 0, 1.6, 0.01, 'off the axis (m)');
+    R(sights, c, 'adsDistance', 0.6, 4, 0.05, 'distance (m)');
+    R(sights, c, 'adsTargetHeight', 0.6, 2.4, 0.01, 'looks at (m)');
+    R(sights, c, 'adsFov', 15, 70, 0.5, 'field of view');
+    R(sights, c, 'adsSensitivity', 0.2, 1.5, 0.01, 'mouse multiplier');
+
+    const body = folder.addFolder('The body');
+    const a = g.aim;
+    R(body, a, 'maxYaw', 10, 120, 1, 'torso twist (deg)');
+    R(body, a, 'maxPitch', 10, 85, 1, 'torso pitch (deg)');
+    // The one that decides whether a strafe reads as a person or as a body on
+    // rails: how far the hips are allowed off the lens toward the travel.
+    R(body, a, 'lean', 0, 90, 1, 'legs lean (deg)');
+    R(body, a, 'rate', 0.000001, 0.005, 0.000001, 'twist follow');
+    R(body, a, 'turnRate', 0.0000001, 0.001, 0.0000001, 'heading follow');
+    R(body, a, 'enter', 0.00001, 0.05, 0.00001, 'aim comes up over');
+    R(body, a, 'range', 20, 400, 5, 'reticle reaches (m)');
+
+    const gun = folder.addFolder('The gun');
+    const f = g.fire;
+    R(gun, f, 'rate', 1, 20, 0.1, 'rounds / second');
+    gun.add(f, 'auto').name('holds down');
+    R(gun, f, 'speed', 30, 400, 5, 'round speed (m/s)');
+    R(gun, f, 'drop', 0, 20, 0.1, 'round falls (m/s²)');
+    R(gun, f, 'spread', 0, 6, 0.01, 'spread standing (deg)');
+    R(gun, f, 'moveSpread', 0, 10, 0.01, 'spread moving (deg)');
+    R(gun, f, 'adsSpread', 0, 3, 0.01, 'spread sighted (deg)');
+    R(gun, f, 'bloom', 0, 2, 0.01, 'per round (deg)');
+    R(gun, f, 'bloomMax', 0, 10, 0.1, 'piles up to (deg)');
+    R(gun, f, 'bloomRecover', 0.5, 20, 0.1, 'bleeds off (deg/s)');
+    R(gun, f, 'recoilPitch', 0, 3, 0.01, 'kick up (deg)');
+    R(gun, f, 'recoilYaw', 0, 2, 0.01, 'kick sideways (deg)');
+    R(gun, f, 'recoilRecover', 0.0000001, 0.001, 0.0000001, 'kick returns');
+    R(gun, f, 'shake', 0, 0.3, 0.001, 'lens knock (m)');
+
+    const hurt = folder.addFolder('What a round costs');
+    const d = g.damage;
+    // Three of these into a hundred is the whole design: change `body` and the
+    // rifle changes from a three-round weapon to something else.
+    R(hurt, d, 'health', 10, 400, 5, 'a body is worth');
+    R(hurt, d, 'body', 1, 200, 1, 'body shot');
+    R(hurt, d, 'head', 1, 400, 1, 'head shot');
+    R(hurt, d, 'impulse', 0, 12, 0.1, 'shove (m/s)');
+    R(hurt, d, 'lift', 0, 8, 0.1, 'lift (m/s)');
+    R(hurt, d, 'spin', 0, 5, 0.05, 'fold');
+    R(hurt, d, 'headImpulse', 0, 12, 0.1, 'head shove (m/s)');
+    R(hurt, d, 'headLift', 0, 8, 0.1, 'head lift (m/s)');
+    R(hurt, d, 'headSpin', 0, 6, 0.05, 'head fold');
+    R(hurt, d, 'flinch', 0, 1, 0.01, 'flare lasts (s)');
+    R(hurt, d, 'flinchRim', 0, 20, 0.1, 'flare brightness');
+    R(hurt, d, 'hitShake', 0, 0.2, 0.001, 'knock on a hit (m)');
+    R(hurt, d, 'killShake', 0, 0.4, 0.001, 'knock on a kill (m)');
+    R(hurt, d, 'killHitStop', 0, 0.3, 0.005, 'kill freeze (s)');
+    R(hurt, d, 'killHitStopScale', 0.01, 1, 0.01, 'freeze depth');
+    R(hurt, d, 'bodyBlood', 0, 80, 1, 'droplets, body');
+    R(hurt, d, 'headBlood', 0, 120, 1, 'droplets, head');
+    R(hurt, d, 'bloodSpeed', 0.2, 12, 0.1, 'droplet speed (m/s)');
+
+    const boxes = folder.addFolder('Hitboxes');
+    const h = g.hitbox;
+    // The head is deliberately a shade larger than a head — see `Hitboxes.js`.
+    R(boxes, h, 'headRadius', 0.05, 0.4, 0.005, 'head (m)');
+    R(boxes, h, 'torsoRadius', 0.1, 0.6, 0.005, 'torso (m)');
+    R(boxes, h, 'legRadius', 0.05, 0.5, 0.005, 'legs (m)');
+
+    const look = folder.addFolder('The look');
+    const t = g.tracer;
+    look.addColor(t, 'color').name('tracer colour');
+    R(look, t, 'brightness', 0.2, 20, 0.1, 'tracer glow');
+    R(look, t, 'length', 0.2, 12, 0.1, 'tracer length (m)');
+    R(look, t, 'width', 0.005, 0.2, 0.005, 'tracer width (m)');
+    R(look, t, 'life', 0.2, 6, 0.1, 'round lives (s)');
+
+    const flash = look.addFolder('Muzzle');
+    const m = g.muzzle;
+    flash.addColor(m, 'color').name('colour');
+    R(flash, m, 'size', 0.05, 1.2, 0.01, 'size (m)');
+    R(flash, m, 'life', 0.01, 0.3, 0.005, 'lasts (s)');
+    R(flash, m, 'light', 0, 40, 0.5, 'light');
+    R(flash, m, 'lightRange', 1, 30, 0.5, 'light reach (m)');
+    // The three that fix a barrel this project guessed the end of.
+    R(flash, m, 'forward', -0.6, 0.6, 0.005, 'along barrel (m)');
+    R(flash, m, 'up', -0.3, 0.3, 0.005, 'above barrel (m)');
+    R(flash, m, 'right', -0.3, 0.3, 0.005, 'beside barrel (m)');
+
+    const sparks = look.addFolder('Impact');
+    const i = g.impact;
+    sparks.addColor(i, 'color').name('spark colour');
+    R(sparks, i, 'brightness', 0.2, 10, 0.1, 'spark glow');
+    R(sparks, i, 'sparks', 0, 60, 1, 'sparks per round');
+    R(sparks, i, 'speed', 0.5, 20, 0.1, 'thrown at (m/s)');
+    R(sparks, i, 'life', 0.05, 2, 0.01, 'last (s)');
+    R(sparks, i, 'size', 0.01, 0.3, 0.005, 'size (m)');
+    R(sparks, i, 'gravity', -40, 0, 0.5, 'fall (m/s²)');
   }
 
   _buildCombat() {

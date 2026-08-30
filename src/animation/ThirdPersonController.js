@@ -1,4 +1,4 @@
-import { Vector2 } from 'three';
+import { MathUtils, Vector2 } from 'three';
 import { settings } from '../config/settings.js';
 import { damp } from '../utils/math.js';
 
@@ -57,6 +57,21 @@ export class ThirdPersonController {
      * @type {import('../combat/EnemyManager.js').EnemyManager|null}
      */
     this.enemies = null;
+
+    /**
+     * A heading the body has to hold regardless of where it is going, in
+     * radians — or null, which is the whole of the rest of this file's rule
+     * that the body faces the way it travels.
+     *
+     * Written by `combat/Gunplay.js` while the rifle is out, and it is what
+     * turns the walk from "run at what you are looking at" into the thing a
+     * shooter needs: the body squares up to the lens and the stick strafes it.
+     * The feet are still allowed to lean toward the travel (`aim.lean`),
+     * because the alternative on a rig with no strafe set is a body sliding
+     * sideways in a forward walk cycle — see `_holdHeading`.
+     * @type {number|null}
+     */
+    this.aimYaw = null;
   }
 
   /** @param {import('../combat/EnemyManager.js').EnemyManager} enemies */
@@ -185,7 +200,9 @@ export class ThirdPersonController {
 
     /* ---- heading ---- */
     const speed = this.velocity.length();
-    if (speed > config.idleThreshold) {
+    if (this.aimYaw !== null) {
+      this._holdHeading(speed, config, dt);
+    } else if (speed > config.idleThreshold) {
       // 0 faces +Z, so the heading of a world direction is atan2(x, z).
       const heading = Math.atan2(this.velocity.x, this.velocity.y);
       this.character.turnToward(heading, settings.character.turnRate, dt);
@@ -194,7 +211,51 @@ export class ThirdPersonController {
     // Smoothing here rather than in the blend keeps one authority over "how fast
     // is the body moving", which both the legs and any HUD can read.
     this.speed = damp(this.speed, speed, 0.0001, dt);
-    this.character.locomotion?.setSpeed(this.speed < config.idleThreshold ? 0 : this.speed);
+    this.character.locomotion?.setSpeed(
+      this.speed < config.idleThreshold ? 0 : this.speed,
+      this._travelSign()
+    );
+  }
+
+  /**
+   * Square the body up to the aim, letting the feet lean into the travel.
+   *
+   * A body held exactly on the lens strafes sideways through a forward walk
+   * cycle, which is the single most obvious thing a third-person shooter can
+   * get wrong. A body turned fully into the travel points a rifle at the
+   * scenery. So it is neither: the hips are allowed off the aim by `aim.lean`
+   * degrees toward wherever the stick is actually pushing, and the torso twists
+   * the rest of the way back onto the reticle (`animation/RifleAim.js`). The
+   * two together are a person walking sideways with a gun up.
+   */
+  _holdHeading(speed, config, dt) {
+    const aim = settings.gunplay.aim;
+    let heading = this.aimYaw;
+
+    if (speed > config.idleThreshold) {
+      const travel = Math.atan2(this.velocity.x, this.velocity.y);
+      const lean = MathUtils.degToRad(aim.lean);
+      // Shortest way round, or a body strafing across the seam leans the long
+      // way and spins on the spot to do it.
+      const offset =
+        MathUtils.euclideanModulo(travel - this.aimYaw + Math.PI, Math.PI * 2) - Math.PI;
+      heading = this.aimYaw + MathUtils.clamp(offset, -lean, lean);
+    }
+
+    this.character.turnToward(heading, aim.turnRate, dt);
+  }
+
+  /**
+   * Whether the body is travelling forward or backward, for the gait's clock.
+   *
+   * Only ever -1 while something holds the heading off the travel, because
+   * nothing else in this file lets the two disagree — see `Locomotion#direction`.
+   */
+  _travelSign() {
+    if (this.aimYaw === null) return 1;
+    const facing = this.character.facing;
+    const forward = this.velocity.x * Math.sin(facing) + this.velocity.y * Math.cos(facing);
+    return forward < 0 ? -1 : 1;
   }
 
   /**
@@ -331,6 +392,7 @@ export class ThirdPersonController {
     this.character.hop?.cancel();
     this.character.flight?.cancel();
     for (const move of this.character.attacks ?? []) move.cancel();
+    this.aimYaw = null;
     this.velocity.set(0, 0);
     this.speed = 0;
     this.character.position.set(0, 0, 0);

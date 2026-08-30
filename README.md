@@ -25,9 +25,20 @@ npm run build
 | `V` | Shadows — mark two bodies, and a shadow of you goes for each. |
 | `C` | Judgement — mark one body, and a fist comes down through a seal over its head. |
 | `X` | Flight — leave the ground, mark bodies to forge a blade for each, `Space` looses them. |
+| `1` | Swap the weapon. The katana burns away and the rifle burns in, or the other way round. |
 | `Tab` | The equipment studio. |
 | drag · wheel | Orbit · zoom. |
 | `G` · `F` · `P` | Editor · frame stats · pause. |
+
+**With the rifle drawn**, the whole stage becomes a shooter — the lens steps
+onto a shoulder, a reticle comes up, and the torso points at whatever it is on.
+
+| | |
+| --- | --- |
+| click | Take the sights: the pointer is captured and the mouse turns the view. `Esc` gives it back. |
+| hold left | Fire. Three rounds in the body or one in the head puts someone down. |
+| hold right | Down the sights — closer, narrower, and far more accurate. |
+| `H` · middle click | Cross the lens to the other shoulder. |
 
 The moves are also drawn along the bottom of the screen, one panel per kind,
 and every one of them is a line in [src/config/abilities.js](src/config/abilities.js) —

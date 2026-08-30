@@ -17,6 +17,7 @@ import { Attack } from './Attack.js';
 import { Flight } from './Flight.js';
 import { Jump } from './Jump.js';
 import { Locomotion } from './Locomotion.js';
+import { RifleAim } from './RifleAim.js';
 
 /** The skinned body. Geometry and skin weights; its materials are replaced below. */
 const CHARACTER_URL = './models/tpose.fbx';
@@ -36,7 +37,14 @@ const ANIMATION_URLS = {
   // `equipment/WeaponSwitch.js`.
   idleRifle: './animations/IdleRifle.fbx',
   walk: './animations/Walk.fbx',
+  // The second gait, on the same terms as the second stand: the same walk with
+  // a rifle up. Which of the pair is on the legs is decided by what is drawn —
+  // see `Locomotion#setStance`.
+  walkRifle: './animations/RifleWalk.fbx',
   run: './animations/Run.fbx',
+  // And the third twin. With all three in, nothing the body does on the ground
+  // is left to the additive hold layer — see `Locomotion#unposed`.
+  runRifle: './animations/RifleRun.fbx',
   bigJump: './animations/BigJump.fbx',
   hop: './animations/Jump.fbx',
   // Not a player state: the summoned shadows hold this on their mark before
@@ -44,6 +52,10 @@ const ANIMATION_URLS = {
   // because this is where the rig and the retargeter are — the shadows are
   // clones of this skeleton, so a clip lifted onto it plays on them as well.
   crouch: './animations/Crouch.fbx',
+  // The recoil. Not a state either: it is layered *over* whatever the body is
+  // doing as a difference rather than as a pose, so the legs go on walking
+  // through a burst — see `animation/RifleAim.js`.
+  fireRifle: './animations/FiringRifle.fbx',
   // The hover. Not a move but a *mode*: `X` puts the body in it and it loops
   // there until `X` takes it out again — see `animation/Flight.js`.
   float: './animations/fight animations/floating.fbx',
@@ -148,6 +160,12 @@ export class CharacterController {
     this.hop = null;
     /** The hover. A mode rather than a move — see `animation/Flight.js`. */
     this.flight = null;
+    /**
+     * Holding a rifle: the layered pose, the recoil and the torso's twist onto
+     * the reticle. Built with the clips; driven by `combat/Gunplay.js`.
+     * @type {RifleAim|null}
+     */
+    this.rifle = null;
     /** The kick, and the warp that puts the foot on a target. Built with them. */
     this.attack = null;
     /** The slash — the same machine, a longer reach. Built with it. */
@@ -300,10 +318,20 @@ export class CharacterController {
         idle: this.clips.get('idle'),
         idleRifle: this.clips.get('idleRifle'),
         walk: this.clips.get('walk'),
-        run: this.clips.get('run')
+        walkRifle: this.clips.get('walkRifle'),
+        run: this.clips.get('run'),
+        runRifle: this.clips.get('runRifle')
       },
       [this.jump, this.hop, this.flight, ...this.attacks]
     );
+
+    // After the blend, and it has to be: the hold layer's weight is the inverse
+    // of the idle's, so it reads the very object built on the line above.
+    this.rifle = new RifleAim(this.mixer, this, {
+      fire: this.clips.get('fireRifle'),
+      idle: this.clips.get('idle'),
+      idleRifle: this.clips.get('idleRifle')
+    });
 
     this.setFacing(character.facing);
     return this;
@@ -773,6 +801,12 @@ export class CharacterController {
 
     this.mixer.timeScale = settings.global.animationSpeed;
     this.mixer.update(dt);
+
+    // Last, and it can only be last: the mixer rewrites every joint's local
+    // rotation from the clips, so the torso's twist onto the reticle has to be
+    // written over the top of it. Costs nothing while the gun is away — the
+    // layer's weight is zero and it returns on the first line.
+    this.rifle?.apply();
   }
 
   /**
@@ -812,6 +846,8 @@ export class CharacterController {
     this.hop = null;
     this.flight?.cancel();
     this.flight = null;
+    this.rifle?.cancel();
+    this.rifle = null;
     for (const move of this.attacks) move.cancel();
     this.attacks = [];
     this.attack = null;

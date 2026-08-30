@@ -1,12 +1,15 @@
-import { PerspectiveCamera, Vector3, MOUSE, TOUCH } from 'three';
+import { MathUtils, PerspectiveCamera, Spherical, Vector3, MOUSE, TOUCH } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { settings } from '../config/settings.js';
-import { clamp, damp } from '../utils/math.js';
+import { clamp, damp, lerp } from '../utils/math.js';
 import { LAYER } from './Layers.js';
 
 const _dir = new Vector3();
 const _desiredTarget = new Vector3();
 const _follow = new Vector3(); // how far the target moved this frame
+const _right = new Vector3(); // the lens's own X, for the shoulder offset
+const _up = new Vector3(); // and its Y
+const _spherical = new Spherical(); // the orbit, while the mouse is turning it
 
 /**
  * Third-person orbit rig.
@@ -62,6 +65,52 @@ export class CameraRig {
     this._shake = 0;
     this._shakeOffset = new Vector3();
     this._shakeSeed = Math.random() * 100;
+
+    /**
+     * The over-the-shoulder aim — how far into it the rig is, and how far down
+     * the sights on top of that.
+     *
+     * Both are blends rather than switches, and `side` is the third: it damps
+     * between -1 and +1 rather than flipping, so swapping shoulders is the lens
+     * *crossing* behind the body instead of teleporting past it. That crossing
+     * is a quarter of a second long and it is what makes the swap feel like a
+     * camera move rather than a glitch.
+     */
+    this.aim = { active: false, ads: false };
+    this._aimBlend = 0;
+    this._adsBlend = 0;
+    this._side = settings.gunplay.shoulder;
+
+    /**
+     * The shoulder offset the lens is currently standing at.
+     *
+     * Held and taken back off exactly as the shake is, and for the same reason:
+     * OrbitControls re-derives its whole orbit from `camera.position` every
+     * frame, so an offset left in there would be read as the user having
+     * dragged the camera sideways and the rig would walk off its target one
+     * frame at a time.
+     *
+     * It is applied *after* `lookAt`, which is the entire trick: the lens is
+     * translated without being re-aimed, so the view direction is untouched and
+     * the body simply slides out of the middle of the frame. The centre of the
+     * screen then looks past the shoulder into the distance — which is what the
+     * reticle is a ray along.
+     */
+    this._aimOffset = new Vector3();
+
+    /**
+     * Mouse-look, buffered.
+     *
+     * The pointer is captured while the gun is out (`combat/Gunplay.js`), and
+     * the deltas arrive on their own events rather than on frames. They are
+     * accumulated here and spent inside `update`, where the aim offset has
+     * already been taken off — turning the orbit while that offset was still
+     * baked into the position would rotate the lens around the wrong point.
+     */
+    this._lookYaw = 0;
+    this._lookPitch = 0;
+    /** How much of the pitch is recoil the rig still owes back. */
+    this._recoil = 0;
 
     this.controls.target.set(0, settings.camera.targetHeight, 0);
     this.controls.update();
@@ -138,6 +187,59 @@ export class CameraRig {
   }
 
   /**
+   * Put the lens on a shoulder, or take it off one.
+   *
+   * Nothing here happens on this call: the two flags are targets, and every
+   * frame damps toward them. So the mode can be set from anywhere, as often as
+   * it likes, without a transition ever being restarted half way through.
+   *
+   * @param {boolean} active the gun is out
+   * @param {boolean} [ads] and it is being sighted down
+   */
+  setAim(active, ads = false) {
+    this.aim.active = active;
+    this.aim.ads = ads;
+  }
+
+  /** How far the lens is onto the shoulder, 0..1 — read by whatever draws the aim. */
+  get aimBlend() {
+    return this._aimBlend;
+  }
+
+  /**
+   * Turn the view, in radians. Positive `yaw` looks right, positive `pitch` up.
+   *
+   * The rig's own way of being pointed, for when the pointer is captured and
+   * OrbitControls has nothing to read (a locked pointer reports no movement in
+   * page coordinates at all). It is buffered rather than applied — see
+   * `_lookYaw`.
+   */
+  look(yaw, pitch) {
+    this._lookYaw += yaw;
+    this._lookPitch += pitch;
+  }
+
+  /**
+   * Kick the view, and remember to give it back.
+   *
+   * Recoil is not a shake: a shake is the lens being knocked and settling back
+   * exactly where it was, and recoil is the *aim* moving — the reticle is
+   * genuinely somewhere else afterwards. It is applied through the same buffer
+   * the mouse uses, which is what makes pulling back down a thing the player
+   * does with the mouse rather than something the rig does for them.
+   *
+   * `_recoil` is the part the rig *will* give back on its own, over
+   * `settings.gunplay.fire.recoilRecover`. What the player has already pulled
+   * down is not in it, so a shot fired mid-correction does not undo the
+   * correction.
+   */
+  punch(pitch, yaw) {
+    this._lookPitch += pitch;
+    this._lookYaw += yaw;
+    this._recoil += pitch;
+  }
+
+  /**
    * The shake itself: two frequencies per axis so it never reads as a wobble,
    * decaying to nothing in about a third of a second.
    */
@@ -159,19 +261,39 @@ export class CameraRig {
 
   update(dt) {
     const cam = settings.camera;
+    const gun = settings.gunplay.camera;
 
-    // Undo last frame's shake before the controls see the position.
-    this.camera.position.sub(this._shakeOffset);
+    // Undo last frame's shake and shoulder offset before the controls see the
+    // position: both are things done *to* the lens after it was aimed, and
+    // OrbitControls would read either of them as the user's own hand.
+    this.camera.position.sub(this._shakeOffset).sub(this._aimOffset);
 
-    if (this.camera.fov !== cam.fov) {
-      this.camera.fov = cam.fov;
+    // How far onto the shoulder, how far down the sights, and which shoulder.
+    // All three on the same curve, so the whole move arrives together.
+    const rate = Math.max(1e-6, gun.blend);
+    this._aimBlend = damp(this._aimBlend, this.aim.active ? 1 : 0, rate, dt);
+    this._adsBlend = damp(this._adsBlend, this.aim.active && this.aim.ads ? 1 : 0, rate, dt);
+    this._side = damp(this._side, settings.gunplay.shoulder, rate, dt);
+
+    this._applyLook(dt, cam);
+
+    // The lens itself: wider on the walk, narrower on the shoulder, narrower
+    // again down the sights. Damped rather than set, because the blends above
+    // already are and a field of view that lagged them would swim.
+    const fov = lerp(cam.fov, lerp(gun.fov, gun.adsFov, this._adsBlend), this._aimBlend);
+    if (Math.abs(this.camera.fov - fov) > 1e-4) {
+      this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
     }
     this.controls.minPolarAngle = cam.minPolar;
     this.controls.maxPolarAngle = cam.maxPolar;
 
     _desiredTarget.copy(this.anchor);
-    _desiredTarget.y += cam.targetHeight;
+    _desiredTarget.y += lerp(
+      cam.targetHeight,
+      lerp(gun.targetHeight, gun.adsTargetHeight, this._adsBlend),
+      this._aimBlend
+    );
 
     const target = this.controls.target;
     _follow.set(
@@ -202,14 +324,88 @@ export class CameraRig {
     this.controls.update();
 
     // Enforce the orbit distance (the wheel and any code writing the setting
-    // both land here).
-    this.distance = damp(this.distance, cam.distance, cam.zoomDamping, dt);
+    // both land here). While the gun is up the setting is overridden rather
+    // than written to: the wheel's own value has to survive the aim, so that
+    // holstering puts the lens back exactly where the player left it.
+    const wanted = lerp(
+      cam.distance,
+      lerp(gun.distance, gun.adsDistance, this._adsBlend),
+      this._aimBlend
+    );
+    this.distance = damp(this.distance, wanted, cam.zoomDamping, dt);
     _dir.copy(this.camera.position).sub(this.controls.target);
     const len = _dir.length() || 1;
     _dir.multiplyScalar(1 / len);
     this.camera.position.copy(this.controls.target).addScaledVector(_dir, this.distance);
 
-    this.camera.position.add(this._applyShake(dt));
+    this.camera.position.add(this._applyShake(dt)).add(this._applyAim(gun));
+  }
+
+  /**
+   * Spend the buffered mouse-look and give back what is left of the recoil.
+   *
+   * Applied by rotating the camera *position* around the target rather than by
+   * asking OrbitControls to do it: the controls re-derive their spherical from
+   * that position at the top of every update, so moving it is the supported
+   * way in — and it means the mouse and a drag cannot end up fighting over two
+   * separate ideas of where the orbit is.
+   */
+  _applyLook(dt, cam) {
+    // The kick coming back down. Real time, and before the buffer is spent, so
+    // the round fired this frame is not immediately half-undone.
+    if (this._recoil !== 0) {
+      const settled = damp(this._recoil, 0, Math.max(1e-9, settings.gunplay.fire.recoilRecover), dt);
+      this._lookPitch -= this._recoil - settled;
+      this._recoil = settled;
+    }
+
+    if (this._lookYaw === 0 && this._lookPitch === 0) return;
+
+    _dir.copy(this.camera.position).sub(this.controls.target);
+    _spherical.setFromVector3(_dir);
+    // Subtracted, not added.
+    //
+    // `theta` is the azimuth of the vector *target → camera*, so the direction
+    // the lens is looking is `theta + π`. Headings here are `atan2(x, z)`, and
+    // in that convention turning to the right *decreases* the heading — which
+    // is also why `D` strafes along `(cos, -sin)` in the controller. So a mouse
+    // moving right has to take theta down, not up. It is the same sign
+    // OrbitControls' own drag uses (`_rotateLeft` subtracts), for the same
+    // reason, and getting it backwards inverts the horizontal axis of the whole
+    // shooter while leaving the vertical alone — which is exactly how it read.
+    _spherical.theta -= this._lookYaw;
+    // Looking up is the lens dropping *below* what it orbits, so pitch adds to
+    // the polar angle — and the same two limits the drag obeys apply here.
+    _spherical.phi = MathUtils.clamp(
+      _spherical.phi + this._lookPitch,
+      cam.minPolar,
+      cam.maxPolar
+    );
+    _spherical.makeSafe();
+    _dir.setFromSpherical(_spherical);
+    this.camera.position.copy(this.controls.target).add(_dir);
+
+    this._lookYaw = 0;
+    this._lookPitch = 0;
+  }
+
+  /**
+   * Where the shoulder offset puts the lens this frame.
+   *
+   * In the camera's *own* frame, and applied as a pure translation — see
+   * `_aimOffset`. The rise is small and does most of its work by getting the
+   * shoulder out of the bottom of the reticle rather than by being seen.
+   */
+  _applyAim(gun) {
+    if (this._aimBlend <= 1e-4) return this._aimOffset.set(0, 0, 0);
+
+    const offset = lerp(gun.offset, gun.adsOffset, this._adsBlend) * this._side * this._aimBlend;
+    const rise = gun.rise * this._aimBlend;
+
+    _right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    _up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
+
+    return this._aimOffset.copy(_right).multiplyScalar(offset).addScaledVector(_up, rise);
   }
 
   resize(width, height) {

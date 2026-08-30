@@ -18,6 +18,7 @@ import { AssetLoader } from '../loaders/AssetLoader.js';
 import { CharacterController } from '../animation/CharacterController.js';
 import { ThirdPersonController } from '../animation/ThirdPersonController.js';
 import { EnemyManager } from '../combat/EnemyManager.js';
+import { Gunplay } from '../combat/Gunplay.js';
 import { TargetMarking } from '../combat/TargetMarking.js';
 
 import { PostProcessing } from '../postprocessing/PostProcessing.js';
@@ -274,6 +275,42 @@ export class App {
     this.targetMarkers = new TargetMarkers();
     this.scene.add(this.targetMarkers.mesh);
 
+    // The shooter. Dormant until the rifle is the weapon in the hand, and from
+    // that moment it owns four things nothing else does: where the lens sits,
+    // where the reticle's ray lands, which way the torso points and what the
+    // trigger costs (`combat/Gunplay.js`). Like the blades it *asks* for the
+    // loadout rather than holding one — neither the weapons nor the gear exist
+    // until `load()` builds the character screen.
+    this.gunplay = new Gunplay({
+      camera: this.camera,
+      rig: this.rig,
+      domElement: this.canvas,
+      character: this.character,
+      controller: this.controller,
+      enemies: this.enemies,
+      terrain: this.terrain,
+      weapons: () => this.characterScreen?.weapons ?? null,
+      equipment: () => this.characterScreen?.equipment ?? null,
+      // Everything that wants the pointer, the body or the ground back. The gun
+      // does not argue with any of them: it simply stands down, gives the
+      // cursor up and lets the lens come back off the shoulder.
+      blocked: () =>
+        this.inCharacterScreen ||
+        this.character.flight?.active === true ||
+        this.marking.active ||
+        this.judgeMarking.active ||
+        this.flightMarking.active,
+      onBlood: (point, direction, count, speed) =>
+        this.blood.emit(point, direction, count, speed),
+      // A gun kill freezes the world too, and for the same reason a kick does —
+      // but the freeze itself belongs to the frame loop, which is here.
+      onHitStop: (seconds, scale) => {
+        this._hitStop = Math.max(this._hitStop, seconds);
+        this._hitStopScale = scale;
+      }
+    });
+    this.scene.add(this.gunplay.group);
+
     /**
      * Whoever is currently wearing a diamond, gathered once a frame.
      *
@@ -365,6 +402,12 @@ export class App {
           // A toggle, so a held key would swap the weapon every frame.
           if (event.repeat) break;
           this._switchWeapon();
+          break;
+        }
+        case 'KeyH': {
+          // The same toggle discipline, and the same reason.
+          if (event.repeat) break;
+          this._swapShoulder();
           break;
         }
         case 'KeyX': {
@@ -459,7 +502,25 @@ export class App {
    */
   _onAction(id) {
     if (id === 'weapon') this._switchWeapon();
+    else if (id === 'shoulder') this._swapShoulder();
     else if (id === 'customize') this.toggleCharacterScreen();
+  }
+
+  /**
+   * Cross the lens to the other shoulder.
+   *
+   * Answered even with the sword out — the setting is real either way and the
+   * rig will be standing on that side the moment the gun comes up — but the
+   * line of text says which case it is, because a camera move nobody can see
+   * happening reads as a dropped key.
+   */
+  _swapShoulder() {
+    const side = this.gunplay.swapShoulder();
+    this.toast.show(
+      this.gunplay.drawn
+        ? `Over the ${side} shoulder`
+        : `Over the ${side} shoulder — draw the rifle to see it`
+    );
   }
 
   /**
@@ -606,6 +667,11 @@ export class App {
     this.character.flight?.cancel();
     this.flightMarking.end();
     this.blades.dismiss({ immediate: true });
+    // And the rifle's own layers, which are the one thing on the body that is
+    // not driven from the frame loop's play branch: the studio has its own
+    // update path, so a torso left twisted toward a reticle in another scene
+    // would be the pose every placement was then judged against.
+    this.character.rifle?.cancel();
     // Nothing to be in reach of on the set, and the rings are not simulated
     // while it is up — so they come off now rather than being left mid-fade.
     // The marks go the same way, silently: the toast below is what the screen
@@ -615,6 +681,10 @@ export class App {
     this.targetRings.clear();
     this.targetHotkeys.clear();
     this.targetMarkers.clear();
+    // And the pointer, which the gun captures. The studio is a place you point
+    // at things with a cursor, and the frame loop returns before the shooter's
+    // own update would have given it back.
+    this.gunplay.releaseLook();
     this.rig.controls.enabled = false;
     this.post.setView(screen.stage.scene, screen.camera.camera);
     this.toast.show('Character screen — drag to orbit · right-drag to pan · wheel to zoom');
@@ -824,6 +894,10 @@ export class App {
       // Lit while the exchange is burning, which is also the window in which a
       // second press is refused — the chip says so rather than swallowing it.
       weapon: this.characterScreen?.weapons.switching ? 'active' : 'ready',
+      // Lit while the shooter is actually up, dimmed while the key would still
+      // work but nothing on screen would change: the setting is real with the
+      // sword out, and the lens is simply not on a shoulder to be crossed.
+      shoulder: this.gunplay.active ? 'active' : 'off',
       // Lit from the moment `V` arms the mark, not from the moment the pair
       // steps out: the key has been spent either way, and the chip is what says
       // the next press means something else.
@@ -843,11 +917,16 @@ export class App {
             : 'off'
     };
 
-    // The one chip that names a value rather than a move: what is in the hand.
+    // The two chips that name a value rather than a move: what is in the hand,
+    // and which side the lens is standing on.
     const drawn = this.characterScreen?.weapons.current;
     if (drawn) {
       this.actionHUD.setLabel('weapon', findItem(drawn)?.name ?? drawn);
     }
+    this.actionHUD.setLabel(
+      'shoulder',
+      this.gunplay.shoulder === 'left' ? 'Left shoulder' : 'Right shoulder'
+    );
 
     for (const move of this.character.attacks ?? []) {
       state[move.configKey] = move.locked
@@ -1069,6 +1148,12 @@ export class App {
     this.sky.update(this.elapsed);
     this.moon.update();
 
+    // Before the stick, because it is what the stick is resolved against while
+    // the rifle is out: the aim decides the heading the body has to hold and
+    // the twist the torso carries, and a frame's lag on either would have the
+    // body chasing a lens that was chasing it back.
+    this.gunplay.aim(dt);
+
     // Movement first: it sets the heading and the speed the blend animates to.
     // It only ever touches XZ; which is the whole reason the body can be dropped
     // onto the ground here without the controller knowing the ground exists.
@@ -1113,6 +1198,13 @@ export class App {
     // And which weapon is in the hand. On the same clock and for the same
     // reason: a swap started a frame before a blow lands is part of the blow.
     this.characterScreen?.weapons.update(dt);
+    // And the trigger, after both — the muzzle is a point on a model hanging
+    // off a hand that has only just finished being posed and scaled, so a round
+    // fired any earlier would leave the gun where it was last frame. The real
+    // clock goes with the simulation's because the flash and the reticle are
+    // the player's, not the world's: a hit-stop must not hold a muzzle flash on
+    // screen for three times its life.
+    this.gunplay.update(dt, raw);
     // Last of the body's followers: the mounts have their final scale and the
     // skeleton its final pose, which is exactly what a shadow steps out of. On
     // the *simulation's* clock, not the real one — a summon that is out there
@@ -1165,6 +1257,7 @@ export class App {
     this.stop();
     window.removeEventListener('keydown', this._onKeyDown);
     this.input.dispose();
+    this.gunplay.dispose();
     this.shadows.dispose();
     this.judgement.dispose();
     this.blades.dispose();

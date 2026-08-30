@@ -141,6 +141,223 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
+  /* Gunplay                                                             */
+  /* ------------------------------------------------------------------ */
+  /**
+   * The shooter, and everything that is only true while the rifle is out.
+   *
+   * The whole mode is entered by drawing the gun — there is no aim key and no
+   * separate state to get into. `equipment/WeaponSwitch.js` says which weapon
+   * is in the hand, `combat/Gunplay.js` reads that, and four things change at
+   * once: the lens steps off the body's axis onto a shoulder, a reticle comes
+   * up in the middle of the screen, the torso stops facing where the feet are
+   * going and points at whatever the reticle is on, and the left button fires.
+   *
+   * The one number that decides whether any of it *reads* is `camera.offset`.
+   * A third-person shooter is a lie held together by one thing: the round comes
+   * out of a gun that is half a metre to the side of and below the lens, and it
+   * still has to arrive exactly where the reticle is. Every game solves it the
+   * same way this does — the lens is shifted sideways so the body is out of the
+   * way of its own aim, the reticle is a ray *from the lens*, and the muzzle is
+   * simply pointed at wherever that ray landed. See `combat/Gunplay.js`.
+   */
+  gunplay: {
+    enabled: true,
+    /**
+     * Which shoulder the lens is over: -1 is the left, +1 the right.
+     *
+     * Live, and swapped with `H` or the middle mouse button. It is a number
+     * rather than a boolean because it is also the *amount*: the offset is
+     * multiplied by it, so crossing between the two sides is one damp on one
+     * value rather than a switch with a special case in the middle.
+     */
+    shoulder: -1,
+
+    camera: {
+      /** Metres the lens steps off the body's axis, toward `shoulder`. */
+      offset: 0.62,
+      /** Metres it rises with it, in the lens's own frame. */
+      rise: 0.05,
+      /** What the orbit resolves to while the gun is up — closer than the walk. */
+      distance: 2.4,
+      /** And how high it looks: the chest rather than the waist. */
+      targetHeight: 1.5,
+      fov: 52,
+
+      /** The same four, held down the sights (right button). */
+      adsOffset: 0.46,
+      adsDistance: 1.75,
+      adsTargetHeight: 1.54,
+      adsFov: 36,
+
+      /** Fraction of the gap left after 1s as the lens moves onto the shoulder. */
+      blend: 0.0006,
+      /** Radians of view per pixel of mouse, while the pointer is captured. */
+      sensitivity: 0.0023,
+      /** What that is multiplied by down the sights — a longer lens turns slower. */
+      adsSensitivity: 0.55
+    },
+
+    aim: {
+      /** Metres the reticle's ray reaches before it gives up and picks a point. */
+      range: 160,
+      /** Metres between samples as that ray walks the height field. */
+      step: 0.55,
+
+      /**
+       * How the twist toward the reticle is shared out up the spine.
+       *
+       * Each joint takes its share of the same yaw and pitch, and the shares
+       * are normalised — so whatever is listed here, the *last* joint in the
+       * chain ends up pointing exactly at the reticle. That is why the neck and
+       * the head are not on the list: the gun hangs off the arms, the arms hang
+       * off `Spine2`, and anything given to a joint above `Spine2` is a share
+       * of the aim the gun does not get. The head coming round with the chest
+       * rather than past it is also simply what a person aiming a rifle does —
+       * the cheek is on the stock.
+       *
+       * Three joints rather than one for the obvious reason: a body that bends
+       * only at the waist is a mannequin on a turntable.
+       */
+      shares: { Spine: 0.26, Spine1: 0.34, Spine2: 0.4 },
+      /** Degrees the torso may twist off the hips before the feet have to move. */
+      maxYaw: 78,
+      /** And how far up and down it will look. */
+      maxPitch: 52,
+      /** Fraction of the angle gap left after 1s (lower = the torso snaps round). */
+      rate: 0.00004,
+      /** Fraction of the blend left after 1s as the aim comes up, and drops. */
+      enter: 0.0008,
+
+      /**
+       * Degrees the *legs* may lean off the lens toward where the body is
+       * actually travelling.
+       *
+       * There is no strafe set on this rig — one walk and one run, both
+       * forward — so a body locked square to the lens moonwalks the moment it
+       * is not going that way. Letting the hips turn part of the way into the
+       * travel and leaving the torso on the reticle is what every game without
+       * a strafe set does, and it costs nothing but this number.
+       */
+      lean: 46,
+      /** Fraction of the heading gap left after 1s while the body holds the aim. */
+      turnRate: 0.000002
+    },
+
+    fire: {
+      /** Rounds a second, and whether holding the button keeps them coming. */
+      rate: 9.5,
+      auto: true,
+      /** Metres a second the round travels. It is a projectile, not a trace. */
+      speed: 155,
+      /** Metres a second squared it falls — 0 is a laser, and reads like one. */
+      drop: 2.5,
+
+      /** Degrees of cone: standing, at a run, and down the sights. */
+      spread: 0.85,
+      moveSpread: 2.8,
+      adsSpread: 0.22,
+      /** Degrees added per round, what that piles up to, and how fast it bleeds. */
+      bloom: 0.5,
+      bloomMax: 3.4,
+      bloomRecover: 5.0,
+
+      /** Degrees the view is kicked up per round, and scattered sideways. */
+      recoilPitch: 0.62,
+      recoilYaw: 0.22,
+      /** Fraction of the kick still standing after 1s — the pull back down. */
+      recoilRecover: 0.000002,
+      /** Metres the lens is knocked, on top of the kick. */
+      shake: 0.028
+    },
+
+    damage: {
+      /** What a body is worth, and what one round takes off it. */
+      health: 100,
+      /** Three in the chest. */
+      body: 34,
+      /** Or one anywhere above the collar. */
+      head: 100,
+
+      /** The blow a lethal round hands the ragdoll — see `combat/Ragdoll.js`. */
+      impulse: 3.0,
+      lift: 1.4,
+      spin: 1.1,
+      /** And what a head shot hands it: less shove, far more fold. */
+      headImpulse: 2.4,
+      headLift: 2.2,
+      headSpin: 2.6,
+
+      /** Droplets a hit throws, and how hard, per kind of hit. */
+      bodyBlood: 12,
+      headBlood: 34,
+      bloodSpeed: 3.2,
+
+      /** Seconds a struck body's rim burns brighter, and by how much. */
+      flinch: 0.24,
+      flinchRim: 6.0,
+
+      /** Metres the lens is knocked on a hit, and again on the kill. */
+      hitShake: 0.02,
+      killShake: 0.06,
+      /** Seconds the world nearly stops on a kill, and how far down it goes. */
+      killHitStop: 0.045,
+      killHitStopScale: 0.3
+    },
+
+    /**
+     * What a round can hit, as three volumes read off the skeleton every frame.
+     *
+     * Cheap analytic shapes rather than the mesh: a sphere on the head and two
+     * capsules down the body. It is the head sphere that matters — it is the
+     * whole difference between a gun that rewards aim and one that does not,
+     * and it is deliberately a little generous.
+     */
+    hitbox: {
+      headRadius: 0.14,
+      torsoRadius: 0.24,
+      legRadius: 0.17
+    },
+
+    tracer: {
+      /** Metres of streak drawn behind each round, and how thick. */
+      length: 2.8,
+      width: 0.035,
+      color: '#ffd9a0',
+      /** Straight past 1, so the bloom pass catches it. */
+      brightness: 5.0,
+      /** Seconds a round lives before it is taken back, whatever it has hit. */
+      life: 1.6
+    },
+
+    muzzle: {
+      /** Metres from the barrel's tip, along the way it points, and off it. */
+      forward: 0.05,
+      up: 0.0,
+      right: 0.0,
+      /** Metres across the flash, and the seconds it lasts. */
+      size: 0.34,
+      life: 0.055,
+      color: '#ffcf8a',
+      /** The light it throws, and how far it reaches. */
+      light: 9.0,
+      lightRange: 7.0
+    },
+
+    impact: {
+      /** Sparks thrown by a round landing on the ground, and how fast. */
+      sparks: 14,
+      speed: 6.5,
+      /** Seconds they last, metres across, and how hard they fall. */
+      life: 0.42,
+      size: 0.055,
+      gravity: -16.0,
+      color: '#ffc98a',
+      brightness: 3.0
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
   /* Locomotion                                                          */
   /* ------------------------------------------------------------------ */
   /**

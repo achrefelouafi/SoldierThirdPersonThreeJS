@@ -10,23 +10,32 @@ import { damp } from '../utils/math.js';
  * stopped and another started, so a stop-start-stop input can never catch the
  * body mid-fade with nothing playing.
  *
- * ## Two idles
+ * ## Everything twice: once armed, once not
  *
- * The body stands differently depending on what is in its hands, so `idle` is
- * really a pair — the plain stand and the one holding a rifle — cross-faded by
- * `setStance`. They are blended rather than switched for the same reason the
- * gaits are: the weapon swap is a burn with a beat of its own, and a pose that
- * cut on that beat would land a frame ahead of the thing it is reacting to.
- * Only the *standing* pose changes; the walk and the run are shared, because
- * the gaits are what carries the body and re-authoring those per weapon is a
- * different job from this one.
+ * The body stands, walks and runs differently depending on what is in its
+ * hands, so each of the three is really a *pair* — the plain clip and the one
+ * holding a rifle — cross-faded by the single `stance` weight `setStance`
+ * drives. They are blended rather than switched for the same reason the gaits
+ * are: the weapon swap is a burn with a beat of its own, and a pose that cut on
+ * that beat would land a frame ahead of the thing it is reacting to.
+ *
+ * A twin that failed to load is not an error — `_weightFor` falls back to the
+ * plain clip per state, so a rig with a rifle walk and no rifle run runs
+ * normally with a gun rather than sliding along in a T-pose. `unposed` is the
+ * one number that says how much of the pose is currently being carried by a
+ * clip with no rifle in it, and `animation/RifleAim.js` lays its additive hold
+ * layer over exactly that much. Which means adding the missing twin is a clip
+ * and a line in `CharacterController` and nothing else: the layer stands down
+ * on its own, in proportion, as the clip takes over.
  *
  * Two things keep the feet on the ground:
  *
- *  - **Phase lock.** Walk is the master cycle and run is slaved to its
- *    normalised phase every frame, so the two clips always contact the floor on
- *    the same foot at the same instant. Crossfading two free-running gait cycles
- *    is what produces the four-legged shuffle in the middle of the blend.
+ *  - **Phase lock.** The plain walk is the master cycle and every other gait —
+ *    the run, and both rifle twins — is slaved to its normalised phase each
+ *    frame, so they all contact the floor on the same foot at the same instant.
+ *    Crossfading two free-running gait cycles is what produces the four-legged
+ *    shuffle in the middle of a blend, and the weapon swap crossfades two walks
+ *    directly into each other.
  *  - **Stride rate.** Playback is scaled by how fast the body is *actually*
  *    travelling against the speed the clip was authored for
  *    (`clipWalkSpeed`/`clipRunSpeed`), so raising `walkSpeed` or `runSpeed` in
@@ -35,9 +44,10 @@ import { damp } from '../utils/math.js';
 export class Locomotion {
   /**
    * @param {import('three').AnimationMixer} mixer
-   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip, idleRifle?: import('three').AnimationClip}} clips
-   *   `idleRifle` is optional: without it every stance resolves to the plain
-   *   stand, which is the right thing for a rig whose export failed to load
+   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip, idleRifle?: import('three').AnimationClip, walkRifle?: import('three').AnimationClip, runRifle?: import('three').AnimationClip}} clips
+   *   the three rifle twins are each optional and each independent: a state
+   *   without one resolves to its plain clip, which is the right thing for a
+   *   rig whose export failed to load or was never authored
    * @param {{weight: number, takeover: number}[]} overrides full-body moves that
    *   mask the gait while they hold the pose — the two jumps and the kick. Only
    *   those two numbers are read, so anything that resolves them qualifies.
@@ -49,10 +59,24 @@ export class Locomotion {
     this.idle = this._action(clips.idle);
     this.idleRifle = this._action(clips.idleRifle);
     this.walk = this._action(clips.walk);
+    this.walkRifle = this._action(clips.walkRifle);
     this.run = this._action(clips.run);
+    this.runRifle = this._action(clips.runRifle);
 
     /** Ground speed the blend is resolving toward, m/s. */
     this.speed = 0;
+    /**
+     * Which way the body is actually travelling relative to where it points:
+     * +1 forward, -1 backward.
+     *
+     * There is one walk on this rig and it goes forward. Backing away from
+     * something with a rifle up is a body travelling one way while facing the
+     * other, and the cheapest honest answer — the one games have used since
+     * there were games — is to run the same cycle in reverse. It is not a
+     * backpedal animation and it does not pretend to be; it is the feet going
+     * the way the ground is, which is the part a player actually reads.
+     */
+    this.direction = 1;
     /** Smoothed weights, so a shove on the input does not pop the pose. */
     this.weights = { idle: 1, walk: 0, run: 0 };
     /** How far the stand is toward the rifle idle, 0..1, and where it is going. */
@@ -72,9 +96,18 @@ export class Locomotion {
     return action;
   }
 
-  /** Ground speed in m/s, from the controller. */
-  setSpeed(speed) {
+  /**
+   * Ground speed in m/s, from the controller.
+   *
+   * @param {number} speed always positive — it is the blend's input, and a
+   *   walk is a walk whichever way it is going
+   * @param {number} [direction] +1 travelling forward, -1 backward. Only ever
+   *   anything but +1 while something is holding the heading off the direction
+   *   of travel, which today is the rifle (see `direction`).
+   */
+  setSpeed(speed, direction = 1) {
     this.speed = Math.max(0, speed);
+    this.direction = direction < 0 ? -1 : 1;
   }
 
   /**
@@ -93,8 +126,30 @@ export class Locomotion {
    *   stand it should already have been in.
    */
   setStance(name, { immediate = false } = {}) {
-    this._stanceTarget = name === 'rifle' && this.idleRifle ? 1 : 0;
+    // One weight for all three pairs, and it is enough that *any* twin loaded:
+    // a rig with a rifle walk but no rifle stand still wants the stance to
+    // move, and `_weightFor` falls back per clip.
+    const armed = this.idleRifle || this.walkRifle || this.runRifle;
+    this._stanceTarget = name === 'rifle' && armed ? 1 : 0;
     if (immediate) this.stance = this._stanceTarget;
+  }
+
+  /**
+   * How much of the pose is being carried by a clip that knows nothing about a
+   * rifle, 0..1.
+   *
+   * Read by `animation/RifleAim.js` to weight its additive hold layer: the
+   * layer's whole job is to put a rifle in the hands of a clip that was
+   * authored without one, so it must apply to exactly this share and no more.
+   * Applied over a clip that *is* holding a rifle it would fold the arms in
+   * twice.
+   */
+  get unposed() {
+    const stance = this.stance;
+    let share = this.weights.idle * (this.idleRifle ? 1 - stance : 1);
+    share += this.weights.walk * (this.walkRifle ? 1 - stance : 1);
+    share += this.weights.run * (this.runRifle ? 1 - stance : 1);
+    return MathUtils.clamp(share, 0, 1);
   }
 
   /**
@@ -109,12 +164,13 @@ export class Locomotion {
    */
   rest() {
     this.speed = 0;
+    this.direction = 1;
     this.weights = { idle: 1, walk: 0, run: 0 };
     // The stance snaps here for the same reason the weights do: a stand held
     // half way between two idles is a pose nobody authored, and gear judged
     // against it is judged against nothing.
     this.stance = this._stanceTarget;
-    for (const key of ['idle', 'idleRifle', 'walk', 'run']) {
+    for (const key of ['idle', 'idleRifle', 'walk', 'walkRifle', 'run', 'runRifle']) {
       const action = this[key];
       if (!action) continue;
       action.setEffectiveWeight(this._weightFor(key));
@@ -123,10 +179,22 @@ export class Locomotion {
     }
   }
 
-  /** One action's share of the blend, with the stand split between its two clips. */
+  /**
+   * One action's share of the blend, with the stand and the walk each split
+   * between their two clips.
+   *
+   * A missing twin collapses to the plain clip rather than to nothing, so a rig
+   * whose rifle walk failed to export walks normally with a gun rather than
+   * sliding along in a T-pose.
+   */
   _weightFor(key, mask = 1) {
-    if (key === 'idle') return this.weights.idle * mask * (1 - this.stance);
-    if (key === 'idleRifle') return this.weights.idle * mask * this.stance;
+    const stance = this.stance;
+    if (key === 'idle') return this.weights.idle * mask * (this.idleRifle ? 1 - stance : 1);
+    if (key === 'idleRifle') return this.weights.idle * mask * stance;
+    if (key === 'walk') return this.weights.walk * mask * (this.walkRifle ? 1 - stance : 1);
+    if (key === 'walkRifle') return this.weights.walk * mask * stance;
+    if (key === 'run') return this.weights.run * mask * (this.runRifle ? 1 - stance : 1);
+    if (key === 'runRifle') return this.weights.run * mask * stance;
     return this.weights[key] * mask;
   }
 
@@ -181,7 +249,9 @@ export class Locomotion {
     this.idle?.setEffectiveWeight(this._weightFor('idle', mask.idle));
     this.idleRifle?.setEffectiveWeight(this._weightFor('idleRifle', mask.idle));
     this.walk?.setEffectiveWeight(this._weightFor('walk', mask.walk));
+    this.walkRifle?.setEffectiveWeight(this._weightFor('walkRifle', mask.walk));
     this.run?.setEffectiveWeight(this._weightFor('run', mask.run));
+    this.runRifle?.setEffectiveWeight(this._weightFor('runRifle', mask.run));
 
     // The pace the blended pose travels at when played at rate 1 — the *clips'*
     // authored speeds, not the designer's `walkSpeed`/`runSpeed`. Dividing the
@@ -198,13 +268,18 @@ export class Locomotion {
     // knob for the part of the mismatch those numbers do not explain. Trim
     // before the clamp, so a trimmed rate is still bounded.
     const trim = MathUtils.lerp(config.walkAnimSpeed, config.runAnimSpeed, toRun);
+    // …and the sign last, after the clamp: a reversed cycle is still bounded
+    // by the same two numbers, it simply runs the other way.
     const stride =
       speed > config.idleThreshold
-        ? MathUtils.clamp((speed / nominal) * trim, config.strideMin, config.strideMax)
+        ? MathUtils.clamp((speed / nominal) * trim, config.strideMin, config.strideMax) *
+          this.direction
         : 1;
 
     this.walk?.setEffectiveTimeScale(stride);
+    this.walkRifle?.setEffectiveTimeScale(stride);
     this.run?.setEffectiveTimeScale(stride);
+    this.runRifle?.setEffectiveTimeScale(stride);
 
     this._lockPhase();
   }
@@ -223,15 +298,29 @@ export class Locomotion {
     return Math.min(1, weight);
   }
 
-  /** Slave the run cycle to the walk's normalised phase (see the class note). */
+  /**
+   * Slave every other cycle to the walk's normalised phase (see the class note).
+   *
+   * The rifle walk is locked to the plain one for exactly the reason the run is,
+   * and more urgently: the two are cross-fading *into each other* through the
+   * weapon swap, and two walk cycles free-running against each other put the
+   * body on four legs for the length of the burn.
+   */
   _lockPhase() {
-    if (!this.walk || !this.run) return;
+    if (!this.walk) return;
     const walkDuration = this.walk.getClip().duration;
-    const runDuration = this.run.getClip().duration;
-    if (walkDuration <= 0 || runDuration <= 0) return;
+    if (walkDuration <= 0) return;
 
-    const phase = (this.walk.time % walkDuration) / walkDuration;
-    this.run.time = phase * runDuration;
+    // Wrapped rather than taken modulo: a reversed walk runs its clock
+    // backwards, and a negative time handed to the others would be read as a
+    // seek past the start of the clip rather than as the end of it.
+    const phase = MathUtils.euclideanModulo(this.walk.time, walkDuration) / walkDuration;
+
+    for (const action of [this.walkRifle, this.run, this.runRifle]) {
+      if (!action) continue;
+      const duration = action.getClip().duration;
+      if (duration > 0) action.time = phase * duration;
+    }
   }
 
   /** Whichever clip currently dominates — for HUDs and debugging. */

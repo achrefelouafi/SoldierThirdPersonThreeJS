@@ -211,6 +211,18 @@ export class Enemy {
     this.timer = 0;
     /** 0 while the body is whole, 1 when it has burned away. */
     this.dissolve = 0;
+    /**
+     * What is left of it, in the units `settings.gunplay.damage` is written in.
+     *
+     * Only the gun spends it. Every melee blow in the project is a *kill* — a
+     * kick that folds a body over a boot and a slash that takes it in half are
+     * not damage numbers, they are the move landing — and none of them come
+     * through here. A rifle is the one weapon on the stage that has to be
+     * fired more than once, and that is the whole reason this field exists.
+     */
+    this.health = settings.gunplay.damage.health;
+    /** Seconds left of the flare a round leaves on the surface. */
+    this._flinch = 0;
     /** True once the body has been cut, which is what makes it two of them. */
     this.sliced = false;
 
@@ -372,6 +384,8 @@ export class Enemy {
   _live(dt, player) {
     const config = settings.enemies;
 
+    if (this._flinch > 0) this._flinch = Math.max(0, this._flinch - dt);
+
     this.mixer.timeScale = settings.global.animationSpeed;
     this.mixer.update(dt);
 
@@ -393,6 +407,24 @@ export class Enemy {
       MathUtils.euclideanModulo(wanted - this.facing + Math.PI, Math.PI * 2) - Math.PI;
     this.facing = damp(this.facing, this.facing + delta, config.turnRate, dt);
     this.root.rotation.y = this.facing - this.forwardYaw;
+  }
+
+  /**
+   * Take a round, and say whether that was the one.
+   *
+   * Deliberately does not kill: `EnemyManager#kill` is the one way a body goes
+   * down, because the fall, the cut and the count all hang off it. This only
+   * spends health and lights the surface up, and whoever fired reads the answer
+   * and decides what to do with it (see `combat/Gunplay.js`).
+   *
+   * @param {number} amount
+   * @returns {'down'|'hit'|null} null if it was already down
+   */
+  wound(amount) {
+    if (!this.alive) return null;
+    this.health -= amount;
+    this._flinch = settings.gunplay.damage.flinch;
+    return this.health <= 0 ? 'down' : 'hit';
   }
 
   /**
@@ -850,6 +882,16 @@ if (uCutSide != 0.0 && (dot(vEnemyBind, uCutNormal) - uCutOffset) * uCutSide < 0
   _syncMaterial() {
     const look = settings.enemies.look;
     const cut = settings.slice;
+    const wound = settings.gunplay.damage;
+
+    // What a round leaves on the surface: the rim it already wears, driven hard
+    // for a fifth of a second. It is the only feedback a body gives for a shot
+    // that did not put it down, and without it a rifle at twenty metres is
+    // indistinguishable from a rifle firing blanks.
+    const flare =
+      this._flinch > 0
+        ? (this._flinch / Math.max(0.01, wound.flinch)) * wound.flinchRim
+        : 0;
 
     for (const part of this.parts) {
       const u = part.uniforms;
@@ -862,7 +904,7 @@ if (uCutSide != 0.0 && (dot(vEnemyBind, uCutNormal) - uCutOffset) * uCutSide < 0
 
       copyColor(u.uRimColor.value, look.rimColor);
       u.uRimPower.value = look.rimPower;
-      u.uRimEmissive.value = look.rimEmissive;
+      u.uRimEmissive.value = look.rimEmissive + flare;
       copyColor(u.uEdgeColor.value, look.edgeColor);
       u.uEdgeEmissive.value = look.edgeEmissive;
       u.uEdgeWidth.value = look.edgeWidth;

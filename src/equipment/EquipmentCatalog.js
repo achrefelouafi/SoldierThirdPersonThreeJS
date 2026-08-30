@@ -83,13 +83,18 @@ export const ITEMS = [
     name: 'Rifle',
     category: 'weapons',
     url: './models/weapons/Rifle.glb',
-    // The export is a whole authoring scene — a copy of the body and of the
-    // katana are in there beside the gun. This is the only branch that is the
-    // rifle; `EquipmentLibrary` lifts it out and disposes the rest, so the
-    // other two never reach the GPU.
-    node: 'Sketchfab_model',
+    // The export is a Sketchfab scene rather than a bare mesh: the gun is three
+    // meshes under a wrapper, and this is the wrapper. Named exactly as the
+    // file has it — a `node` that does not match is not an error, it simply
+    // falls through to the whole scene with a warning, which for this file is
+    // the same content and a line of noise in the console.
+    node: 'Sketchfab_model.001',
     note: 'Barrel runs down +Z. The ring on it turns.',
     stance: 'rifle',
+    // The one flag that says "this weapon is fired rather than swung". Drawing
+    // it is what puts the whole shooter on — the shoulder camera, the reticle,
+    // the torso's twist onto it and the trigger. See `combat/Gunplay.js`.
+    ranged: true,
     // Both weapons ride the skeleton at all times and the switch decides which
     // one is *visible*, so the gun is mounted from the first frame exactly as
     // the blade is — that is what lets either be tuned on the set at any point.
@@ -196,6 +201,18 @@ export function weaponItems() {
 /** Whether this id names a weapon. */
 export function isWeapon(id) {
   return typeof findItem(id)?.stance === 'string';
+}
+
+/**
+ * Whether this id names a weapon that is *fired*.
+ *
+ * The single question the whole shooter hangs off: `combat/Gunplay.js` asks it
+ * of whatever is drawn, every frame, and turns itself on or off by the answer.
+ * Adding a second gun to the catalog is therefore a `ranged: true` and nothing
+ * else.
+ */
+export function isRanged(id) {
+  return findItem(id)?.ranged === true;
 }
 
 /** The one that is drawn before anyone has said otherwise: the first listed. */

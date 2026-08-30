@@ -81,6 +81,19 @@ export const ABILITIES = [
     press: true
   },
   {
+    id: 'shoulder',
+    category: 'movement',
+    // Rewritten each frame with the side the lens is actually on, so the chip
+    // answers "which shoulder am I over" as well as changing it.
+    label: 'Left shoulder',
+    hotkey: 'H',
+    code: 'KeyH',
+    note:
+      'Cross the camera to the other shoulder. Only means anything with the rifle out — ' +
+      'the middle mouse button does the same thing.',
+    press: true
+  },
+  {
     id: 'customize',
     category: 'movement',
     label: 'Character',
