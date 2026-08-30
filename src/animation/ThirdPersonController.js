@@ -5,6 +5,7 @@ import { damp } from '../utils/math.js';
 const _desired = new Vector2(); // world XZ target velocity, m/s
 const _delta = new Vector2(); // the step from the current velocity toward it
 const _travel = new Vector2(); // ground covered by the jump this frame, model frame
+const _gait = { direction: 1, lateral: 0 }; // travel resolved into the body's own frame
 
 /**
  * Camera-relative third-person movement.
@@ -211,22 +212,28 @@ export class ThirdPersonController {
     // Smoothing here rather than in the blend keeps one authority over "how fast
     // is the body moving", which both the legs and any HUD can read.
     this.speed = damp(this.speed, speed, 0.0001, dt);
+    const gait = this._travelFrame();
     this.character.locomotion?.setSpeed(
       this.speed < config.idleThreshold ? 0 : this.speed,
-      this._travelSign()
+      gait.direction,
+      gait.lateral
     );
   }
 
   /**
    * Square the body up to the aim, letting the feet lean into the travel.
    *
-   * A body held exactly on the lens strafes sideways through a forward walk
-   * cycle, which is the single most obvious thing a third-person shooter can
-   * get wrong. A body turned fully into the travel points a rifle at the
-   * scenery. So it is neither: the hips are allowed off the aim by `aim.lean`
-   * degrees toward wherever the stick is actually pushing, and the torso twists
-   * the rest of the way back onto the reticle (`animation/RifleAim.js`). The
-   * two together are a person walking sideways with a gun up.
+   * A body turned fully into the travel points a rifle at the scenery, and a
+   * body pinned exactly on the lens is a mannequin on rails. So it is neither:
+   * the hips are allowed off the aim by `aim.lean` degrees toward wherever the
+   * stick is actually pushing, and the torso twists the rest of the way back
+   * onto the reticle (`animation/RifleAim.js`).
+   *
+   * The lean used to be the whole answer to sideways travel and it is not any
+   * more: the part of the travel it leaves off the nose now goes to the
+   * sidestep clip (`_travelFrame`, `Locomotion#strafe`). That is why the number
+   * is small — every degree of lean is a degree of strafe the legs no longer
+   * have to show, and the legs show it better than the hips do.
    */
   _holdHeading(speed, config, dt) {
     const aim = settings.gunplay.aim;
@@ -246,16 +253,44 @@ export class ThirdPersonController {
   }
 
   /**
-   * Whether the body is travelling forward or backward, for the gait's clock.
+   * The travel resolved into the body's own frame: which way along its nose it
+   * is going, and how much of the trip is sideways, to which side.
    *
-   * Only ever -1 while something holds the heading off the travel, because
-   * nothing else in this file lets the two disagree — see `Locomotion#direction`.
+   * Both are only ever anything but "straight ahead" while something holds the
+   * heading off the travel, because nothing else in this file lets the two
+   * disagree — so with no aim up this is the identity and the blend is the walk
+   * it always was. See `Locomotion#direction` and `Locomotion#strafe`.
+   *
+   * The sideways share is the *L1* split between the two components rather than
+   * the sine of the angle between them: it is a partition of one walk between
+   * two clips, so what matters is that a travel 45° off the nose reads as half
+   * of each, which sine does not give (it gives 0.71) and this does.
+   *
+   * @returns {{direction: number, lateral: number}} reused between frames — read
+   *   it, do not keep it
    */
-  _travelSign() {
-    if (this.aimYaw === null) return 1;
+  _travelFrame() {
+    _gait.direction = 1;
+    _gait.lateral = 0;
+    if (this.aimYaw === null) return _gait;
+
+    // The body's own axes: it faces (sin, cos) — 0 is +Z — so its local +X, the
+    // axis the sidestep clip travels along, is (cos, -sin). On a rig facing +Z
+    // that axis is the character's *left*, which is the way that clip goes and
+    // therefore the way `Locomotion#strafe` counts.
     const facing = this.character.facing;
-    const forward = this.velocity.x * Math.sin(facing) + this.velocity.y * Math.cos(facing);
-    return forward < 0 ? -1 : 1;
+    const sin = Math.sin(facing);
+    const cos = Math.cos(facing);
+    const forward = this.velocity.x * sin + this.velocity.y * cos;
+    const sideways = this.velocity.x * cos - this.velocity.y * sin;
+
+    const total = Math.abs(forward) + Math.abs(sideways);
+    _gait.direction = forward < 0 ? -1 : 1;
+    // Below the threshold the blend is on the idle anyway and the division is
+    // noise over noise — a body settling to a stop would otherwise pick a side
+    // to lean on out of whatever was left in the velocity.
+    if (total > settings.locomotion.idleThreshold) _gait.lateral = sideways / total;
+    return _gait;
   }
 
   /**

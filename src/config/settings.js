@@ -249,13 +249,17 @@ export const settings = {
        * Degrees the *legs* may lean off the lens toward where the body is
        * actually travelling.
        *
-       * There is no strafe set on this rig — one walk and one run, both
-       * forward — so a body locked square to the lens moonwalks the moment it
-       * is not going that way. Letting the hips turn part of the way into the
-       * travel and leaving the torso on the reticle is what every game without
-       * a strafe set does, and it costs nothing but this number.
+       * This used to be the whole answer to sideways travel — with one walk and
+       * one run, both forward, a body locked square to the lens moonwalks the
+       * moment it is not going that way, and turning the hips part of the way
+       * into the travel is what every game without a strafe set does about it.
+       * There is a strafe set now (`WalkSideRifle.fbx`), so the number is a
+       * fraction of what it was: what the hips no longer take, the sidestep
+       * clip shows properly, and every degree given back here is a degree of
+       * that clip traded for a body pointing somewhere it is not looking. Wind
+       * it up toward 90 and the strafe fades out as the hips swallow it.
        */
-      lean: 46,
+      lean: 20,
       /** Fraction of the heading gap left after 1s while the body holds the aim. */
       turnRate: 0.000002
     },

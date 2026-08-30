@@ -43,6 +43,13 @@ const ANIMATION_URLS = {
   // Which of the pair is on the legs is decided by what is drawn — see
   // `Locomotion#setStance`.
   walkRifle: './animations/WalkRifle.fbx',
+  // The sidestep, and the only clip on the rig that travels anywhere but
+  // forward: the same rifle walk crabbing to the character's *left*. Going
+  // right is this cycle run backwards, which is why there is one file and not
+  // two — see `Locomotion#_lockPhase`. It is what stops a body squared up to
+  // the lens from moonwalking sideways through a forward walk, and it is the
+  // reason `settings.gunplay.aim.lean` is as small as it is.
+  walkSideRifle: './animations/WalkSideRifle.fbx',
   run: './animations/Run.fbx',
   // And the third twin: the sprint, where the gun is carried rather than aimed.
   // With all three in, nothing the body does on the ground is left to the
@@ -322,6 +329,7 @@ export class CharacterController {
         idleRifle: this.clips.get('idleRifle'),
         walk: this.clips.get('walk'),
         walkRifle: this.clips.get('walkRifle'),
+        walkSideRifle: this.clips.get('walkSideRifle'),
         run: this.clips.get('run'),
         runRifle: this.clips.get('runRifle')
       },

@@ -19,6 +19,23 @@ import { damp } from '../utils/math.js';
  * are: the weapon swap is a burn with a beat of its own, and a pose that cut on
  * that beat would land a frame ahead of the thing it is reacting to.
  *
+ * ## And the walk once more, sideways
+ *
+ * The rifle walk is really a *set*: the forward cycle and the sidestep, chosen
+ * by how far off its own heading the body is actually travelling (`setSpeed`'s
+ * `lateral`). Squared up to the lens with a gun up, a body goes where the stick
+ * says and faces where the camera does, and the two disagree by up to a right
+ * angle — which through a forward walk cycle is a moonwalk, the single most
+ * obvious thing a third-person shooter can get wrong. `WalkSideRifle.fbx`
+ * strafes to the character's left; right is the same cycle run backwards, on
+ * exactly the terms the backpedal already runs the forward one.
+ *
+ * It is one weight, `strafe`, signed: its magnitude is how much of the walk the
+ * sidestep carries and its sign is which way. Damping the *signed* number is
+ * what makes a left-to-right reversal safe — the clip's weight passes through
+ * zero at the instant its direction flips, so the frame where the cycle turns
+ * around is a frame nobody can see.
+ *
  * A twin that failed to load is not an error — `_weightFor` falls back to the
  * plain clip per state, so a rig with a rifle walk and no rifle run runs
  * normally with a gun rather than sliding along in a T-pose. `unposed` is the
@@ -31,11 +48,13 @@ import { damp } from '../utils/math.js';
  * Two things keep the feet on the ground:
  *
  *  - **Phase lock.** The plain walk is the master cycle and every other gait —
- *    the run, and both rifle twins — is slaved to its normalised phase each
+ *    the run, and the rifle twins — is slaved to its normalised phase each
  *    frame, so they all contact the floor on the same foot at the same instant.
  *    Crossfading two free-running gait cycles is what produces the four-legged
  *    shuffle in the middle of a blend, and the weapon swap crossfades two walks
- *    directly into each other.
+ *    directly into each other. The sidestep is locked to the walk's *rate*
+ *    rather than to its phase, because it is the one clip that has to be able
+ *    to turn around — see `_lockPhase`.
  *  - **Stride rate.** Playback is scaled by how fast the body is *actually*
  *    travelling against the speed the clip was authored for
  *    (`clipWalkSpeed`/`clipRunSpeed`), so raising `walkSpeed` or `runSpeed` in
@@ -44,8 +63,8 @@ import { damp } from '../utils/math.js';
 export class Locomotion {
   /**
    * @param {import('three').AnimationMixer} mixer
-   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip, idleRifle?: import('three').AnimationClip, walkRifle?: import('three').AnimationClip, runRifle?: import('three').AnimationClip}} clips
-   *   the three rifle twins are each optional and each independent: a state
+   * @param {{idle: import('three').AnimationClip, walk: import('three').AnimationClip, run: import('three').AnimationClip, idleRifle?: import('three').AnimationClip, walkRifle?: import('three').AnimationClip, walkSideRifle?: import('three').AnimationClip, runRifle?: import('three').AnimationClip}} clips
+   *   the rifle clips are each optional and each independent: a state
    *   without one resolves to its plain clip, which is the right thing for a
    *   rig whose export failed to load or was never authored
    * @param {{weight: number, takeover: number}[]} overrides full-body moves that
@@ -60,6 +79,7 @@ export class Locomotion {
     this.idleRifle = this._action(clips.idleRifle);
     this.walk = this._action(clips.walk);
     this.walkRifle = this._action(clips.walkRifle);
+    this.walkSideRifle = this._action(clips.walkSideRifle);
     this.run = this._action(clips.run);
     this.runRifle = this._action(clips.runRifle);
 
@@ -79,6 +99,27 @@ export class Locomotion {
     this.direction = 1;
     /** Smoothed weights, so a shove on the input does not pop the pose. */
     this.weights = { idle: 1, walk: 0, run: 0 };
+    /**
+     * How much of the walk the sidestep is carrying and which way, -1..+1.
+     *
+     * +1 is a full strafe to the character's *left* — the way the clip itself
+     * goes, which is why that end of the range is the one that needs no trick —
+     * -1 to its right, 0 a body walking where it is pointing. Signed rather
+     * than a magnitude and a flag so that a reversal crosses zero, and along
+     * the model's own +X so that the sign means the same thing here as it does
+     * to the clip it weights. See the class note.
+     */
+    this.strafe = 0;
+    this._strafeTarget = 0;
+    /**
+     * The sidestep's own place in its cycle, 0..1, and the walk phase it was
+     * last stepped against.
+     *
+     * The one gait that is not simply handed the walk's phase — see
+     * `_lockPhase`.
+     */
+    this._sidePhase = 0;
+    this._walkPhase = 0;
     /** How far the stand is toward the rifle idle, 0..1, and where it is going. */
     this.stance = 0;
     this._stanceTarget = 0;
@@ -104,10 +145,15 @@ export class Locomotion {
    * @param {number} [direction] +1 travelling forward, -1 backward. Only ever
    *   anything but +1 while something is holding the heading off the direction
    *   of travel, which today is the rifle (see `direction`).
+   * @param {number} [lateral] how much of that travel is sideways and which
+   *   way, -1..+1, +1 being straight out to the character's left. Same
+   *   condition as `direction` and the same source: it is only ever anything
+   *   but 0 while the aim owns the heading (see `strafe`).
    */
-  setSpeed(speed, direction = 1) {
+  setSpeed(speed, direction = 1, lateral = 0) {
     this.speed = Math.max(0, speed);
     this.direction = direction < 0 ? -1 : 1;
+    this._strafeTarget = MathUtils.clamp(lateral, -1, 1);
   }
 
   /**
@@ -129,7 +175,7 @@ export class Locomotion {
     // One weight for all three pairs, and it is enough that *any* twin loaded:
     // a rig with a rifle walk but no rifle stand still wants the stance to
     // move, and `_weightFor` falls back per clip.
-    const armed = this.idleRifle || this.walkRifle || this.runRifle;
+    const armed = this.idleRifle || this.walkRifle || this.walkSideRifle || this.runRifle;
     this._stanceTarget = name === 'rifle' && armed ? 1 : 0;
     if (immediate) this.stance = this._stanceTarget;
   }
@@ -145,10 +191,11 @@ export class Locomotion {
    * twice.
    */
   get unposed() {
-    const stance = this.stance;
-    let share = this.weights.idle * (this.idleRifle ? 1 - stance : 1);
-    share += this.weights.walk * (this.walkRifle ? 1 - stance : 1);
-    share += this.weights.run * (this.runRifle ? 1 - stance : 1);
+    // The plain clips' own weights, unmasked: `_weightFor` is already the one
+    // place that knows which states have a rifle twin and how much of each is
+    // on the pose right now, and asking it is what keeps this number honest as
+    // clips are added rather than making every new twin two edits.
+    const share = this._weightFor('idle') + this._weightFor('walk') + this._weightFor('run');
     return MathUtils.clamp(share, 0, 1);
   }
 
@@ -165,12 +212,22 @@ export class Locomotion {
   rest() {
     this.speed = 0;
     this.direction = 1;
+    this.strafe = this._strafeTarget = 0;
+    this._sidePhase = this._walkPhase = 0;
     this.weights = { idle: 1, walk: 0, run: 0 };
     // The stance snaps here for the same reason the weights do: a stand held
     // half way between two idles is a pose nobody authored, and gear judged
     // against it is judged against nothing.
     this.stance = this._stanceTarget;
-    for (const key of ['idle', 'idleRifle', 'walk', 'walkRifle', 'run', 'runRifle']) {
+    for (const key of [
+      'idle',
+      'idleRifle',
+      'walk',
+      'walkRifle',
+      'walkSideRifle',
+      'run',
+      'runRifle'
+    ]) {
       const action = this[key];
       if (!action) continue;
       action.setEffectiveWeight(this._weightFor(key));
@@ -191,11 +248,29 @@ export class Locomotion {
     const stance = this.stance;
     if (key === 'idle') return this.weights.idle * mask * (this.idleRifle ? 1 - stance : 1);
     if (key === 'idleRifle') return this.weights.idle * mask * stance;
-    if (key === 'walk') return this.weights.walk * mask * (this.walkRifle ? 1 - stance : 1);
-    if (key === 'walkRifle') return this.weights.walk * mask * stance;
+    // The walk splits twice over: once between the plain cycle and the rifle
+    // one, by the stance, and then that rifle share again between walking and
+    // strafing. `_sidestep` is 0 without the clip, so a rig that never loaded
+    // it splits exactly once and this reads as it always did.
+    const sidestep = this._sidestep;
+    if (key === 'walk') {
+      const covered = (this.walkRifle ? 1 - sidestep : 0) + sidestep;
+      return this.weights.walk * mask * (1 - stance * covered);
+    }
+    if (key === 'walkRifle') return this.weights.walk * mask * stance * (1 - sidestep);
+    if (key === 'walkSideRifle') return this.weights.walk * mask * stance * sidestep;
     if (key === 'run') return this.weights.run * mask * (this.runRifle ? 1 - stance : 1);
     if (key === 'runRifle') return this.weights.run * mask * stance;
     return this.weights[key] * mask;
+  }
+
+  /**
+   * How much of the rifle walk the sidestep has, 0..1 — and none of it if the
+   * clip never loaded, which leaves such a rig leaning into its strafes through
+   * the forward cycle exactly as it did before the clip existed.
+   */
+  get _sidestep() {
+    return this.walkSideRifle ? Math.abs(this.strafe) : 0;
   }
 
   /**
@@ -245,11 +320,16 @@ export class Locomotion {
     // The stand is one weight split across two clips, on the same curve as
     // everything else — see `setStance`.
     this.stance = damp(this.stance, this._stanceTarget, config.stanceRate, dt);
+    // And the walk is one more weight split across two clips, on the gait's own
+    // curve: the stick swinging from one side of the aim to the other is the
+    // same kind of change as the stick swinging from a walk into a run.
+    this.strafe = damp(this.strafe, this._strafeTarget, config.blendRate, dt);
 
     this.idle?.setEffectiveWeight(this._weightFor('idle', mask.idle));
     this.idleRifle?.setEffectiveWeight(this._weightFor('idleRifle', mask.idle));
     this.walk?.setEffectiveWeight(this._weightFor('walk', mask.walk));
     this.walkRifle?.setEffectiveWeight(this._weightFor('walkRifle', mask.walk));
+    this.walkSideRifle?.setEffectiveWeight(this._weightFor('walkSideRifle', mask.walk));
     this.run?.setEffectiveWeight(this._weightFor('run', mask.run));
     this.runRifle?.setEffectiveWeight(this._weightFor('runRifle', mask.run));
 
@@ -278,6 +358,7 @@ export class Locomotion {
 
     this.walk?.setEffectiveTimeScale(stride);
     this.walkRifle?.setEffectiveTimeScale(stride);
+    this.walkSideRifle?.setEffectiveTimeScale(stride);
     this.run?.setEffectiveTimeScale(stride);
     this.runRifle?.setEffectiveTimeScale(stride);
 
@@ -321,6 +402,35 @@ export class Locomotion {
       const duration = action.getClip().duration;
       if (duration > 0) action.time = phase * duration;
     }
+
+    // The sidestep gets the walk's *rate* instead of its phase, and its own
+    // sign: the clip strafes left, so going right is that cycle read backwards
+    // — the same trick the backpedal plays on the forward walk, for the same
+    // reason. Which is why it cannot simply be handed the phase like the
+    // others. Reading it as a mirror (`1 - phase`) would be a jump of half a
+    // cycle every time the mirror turned over, and one of the two things that
+    // turns it over is the *walk* reversing, which happens while the sidestep
+    // is carrying nearly the whole pose. So the walk's step is taken unsigned,
+    // given the strafe's sign and accumulated: the cycle rate still comes from
+    // the master clock, so the two never drift apart or shuffle against each
+    // other, and reversing it is a change of direction rather than a cut.
+    //
+    // The other thing that turns it over — the strafe crossing zero — is free
+    // either way: the clip's weight is |strafe|, so it is at nothing exactly
+    // when its direction changes.
+    if (this.walkSideRifle) {
+      // Shortest way round, so the wrap at the end of the cycle reads as the
+      // small step it is rather than as a lap in the other direction.
+      const step = MathUtils.euclideanModulo(phase - this._walkPhase + 0.5, 1) - 0.5;
+      this._sidePhase = MathUtils.euclideanModulo(
+        this._sidePhase + Math.abs(step) * Math.sign(this.strafe),
+        1
+      );
+      const duration = this.walkSideRifle.getClip().duration;
+      if (duration > 0) this.walkSideRifle.time = this._sidePhase * duration;
+    }
+
+    this._walkPhase = phase;
   }
 
   /** Whichever clip currently dominates — for HUDs and debugging. */
