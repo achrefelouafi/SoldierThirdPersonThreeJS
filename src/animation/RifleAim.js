@@ -98,6 +98,8 @@ export class RifleAim {
 
     /** short bone name → its share of the twist. Resolved on first use. */
     this._chain = null;
+    /** Whether the last `apply` left a twist standing on the skeleton. */
+    this._dirty = false;
   }
 
   /** Whether the recoil clip is there. The aim itself works without it. */
@@ -198,10 +200,37 @@ export class RifleAim {
    * be a great deal of machinery in service of a lie the player cannot see.
    */
   apply() {
-    if (this.weight <= 1e-3) return;
-
     const chain = this._resolveChain();
     if (!chain.length) return;
+
+    const active = this.weight > 1e-3;
+    if (!active && !this._dirty) return;
+
+    // Take back what the last call left on the skeleton, before anything reads
+    // it. Normally there is nothing to take back — the mixer rewrites every
+    // joint from the clips each frame and our writing is gone by the time we
+    // are called again. But it only *writes* a joint whose value has changed
+    // since the last time it wrote one (`PropertyMixer#apply` compares the two
+    // interleaved accumulators and returns early when they match), and while
+    // the clock is stopped nothing changes: the mixer computes the same pose,
+    // finds it identical, and leaves the bone alone. What is standing on that
+    // bone is then our own twist, and turning it again would add a second one
+    // to it — a frame at a time, sixty times a second, which is a torso
+    // spinning on a paused game.
+    //
+    // Restoring only where the bone still carries exactly what we wrote is
+    // what makes this safe to do unconditionally: a joint the mixer did
+    // refresh no longer matches, and is left as the clips have it.
+    if (this._dirty) {
+      for (const link of chain) {
+        if (!link.bone.quaternion.equals(link.written)) continue;
+        link.bone.quaternion.copy(link.base);
+        link.bone.updateMatrix();
+      }
+      this._dirty = false;
+    }
+
+    if (!active) return;
 
     const yaw = this._yaw * this.weight;
     const pitch = this._pitch * this.weight;
@@ -214,6 +243,9 @@ export class RifleAim {
     for (const link of chain) {
       const bone = link.bone;
       const share = link.share;
+
+      // The pose the mixer produced, kept so the next frame can get back to it.
+      link.base.copy(bone.quaternion);
 
       _yawQuat.setFromAxisAngle(UP, yaw * share);
       // Negated: turning the body's forward about its own right by a positive
@@ -235,7 +267,10 @@ export class RifleAim {
       // this local rotation — so the turn just written is what the joint above
       // is measured against, and the shares compound the way they should.
       bone.updateMatrix();
+      link.written.copy(bone.quaternion);
     }
+
+    this._dirty = true;
   }
 
   /** Drop the layer, now — the gun has gone away, or the body has. */
@@ -277,9 +312,19 @@ export class RifleAim {
     for (const name of Object.keys(shares)) {
       const bone = this.character.getBone(name);
       if (!bone) continue;
-      links.push({ bone, share: Math.max(0, shares[name]) / total });
+      links.push({
+        bone,
+        share: Math.max(0, shares[name]) / total,
+        // The joint as the mixer left it, and as this file left it. The pair is
+        // what lets `apply` tell its own writing apart from a fresh pose.
+        base: new Quaternion(),
+        written: new Quaternion()
+      });
     }
 
+    // A chain built this frame has no writing of ours recorded, so anything the
+    // old one left standing is not ours to take back any more.
+    this._dirty = false;
     this._chain = { source: shares, links };
     return links;
   }
