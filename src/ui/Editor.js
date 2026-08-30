@@ -19,7 +19,8 @@ import { PresetManager } from './PresetManager.js';
  */
 export class Editor {
   /**
-   * @param {object} hooks { onToast, onRespawnEnemies, onCastJudgement }
+   * @param {object} hooks { onToast, onRespawnEnemies, onCastJudgement, onCastAscendance,
+   *   onCastShadowBoost }
    */
   constructor(hooks = {}) {
     this.hooks = hooks;
@@ -38,6 +39,8 @@ export class Editor {
     this._buildLeaves();
     this._buildShadowCharacter();
     this._buildJudgement();
+    this._buildAscendance();
+    this._buildShadowBoost();
     this._buildFlight();
     this._buildPost();
     this._buildCamera();
@@ -907,6 +910,337 @@ export class Editor {
   }
 
   /**
+   * Ascendance — the light, and the ten seconds it leaves behind.
+   *
+   * Five layers, one folder each, because that is how the effect is built and
+   * dialling one of them means turning the other four off in your head first.
+   *
+   * The three worth reaching for before any of the rest are `duration` (how
+   * long the boon is up), `haste` and `might` (what it is actually worth), and
+   * `pillar -> height`, the number that decides whether the shaft came out of
+   * the sky or out of a lamp just above the frame. "Call it down" fires the
+   * whole thing on the spot, which is the only sane way to tune a move whose
+   * first second is an intro.
+   */
+  _buildAscendance() {
+    const folder = this.gui.addFolder('Ascendance (the light)');
+    const a = settings.ascendance;
+    const R = Editor.range;
+
+    folder
+      .add({ cast: () => this.hooks.onCastAscendance?.() }, 'cast')
+      .name('Call it down (on you)');
+    folder.add(a, 'enabled').name('enabled');
+    R(folder, a, 'duration', 1, 60, 0.5, 'boon lasts (s)');
+    R(folder, a, 'warn', 0, 6, 0.1, 'warns for last (s)');
+    R(folder, a, 'haste', 1, 3, 0.01, 'movement x');
+    R(folder, a, 'might', 1, 4, 0.01, 'blows x');
+    R(folder, a, 'shake', 0, 1.5, 0.01, 'arrival shake (m)');
+
+    // The choreography. `duration` is not one of these — it is the beat
+    // between `descend` and `fade`.
+    const beats = folder.addFolder('Beats (s)');
+    const b = a.beats;
+    R(beats, b, 'gather', 0.05, 3, 0.01, 'circle draws itself');
+    R(beats, b, 'descend', 0.05, 2, 0.01, 'the shaft comes down');
+    R(beats, b, 'settle', 0.05, 3, 0.01, 'the bore closes');
+    R(beats, b, 'fade', 0.1, 3, 0.01, 'drawn back up');
+
+    // Layer 1. The same shader the fist's seal is drawn with, bound to the
+    // height field so this one lies on the ground instead of hanging over it.
+    const sigil = folder.addFolder('1 - The sigil');
+    const g = a.sigil;
+    R(sigil, g, 'radius', 0.5, 6, 0.05, 'radius (m)');
+    R(sigil, g, 'lift', 0, 0.4, 0.005, 'off the floor (m)');
+    sigil.addColor(g, 'color').name('line colour');
+    sigil.addColor(g, 'coreColor').name('core colour');
+    R(sigil, g, 'intensity', 0, 8, 0.05, 'brightness');
+    R(sigil, g, 'spin', -2, 2, 0.01, 'turns a second');
+    R(sigil, g, 'ticks', 4, 120, 1, 'ticks');
+    R(sigil, g, 'runes', 3, 40, 1, 'runes');
+    R(sigil, g, 'spokes', 2, 24, 1, 'spokes');
+    R(sigil, g, 'width', 0.002, 0.06, 0.001, 'stroke weight');
+    R(sigil, g, 'softness', 0.001, 0.06, 0.001, 'feather');
+    R(sigil, g, 'haze', 0, 2, 0.01, 'inner glow');
+    R(sigil, g, 'detail', 0, 1, 0.01, 'mottling');
+    R(sigil, g, 'pulse', 0, 1, 0.01, 'breath depth');
+    R(sigil, g, 'pulseSpeed', 0, 20, 0.1, 'breath speed');
+
+    // Layer 2. `corePower` is the one to reach for: it is the profile the eye's
+    // ray takes through the column, and it is the difference between a disc of
+    // light and a filament with air around it.
+    const pillar = folder.addFolder('2 - The pillar');
+    const p = a.pillar;
+    R(pillar, p, 'radius', 0.1, 4, 0.01, 'bore (m)');
+    R(pillar, p, 'height', 4, 80, 0.5, 'reaches up (m)');
+    pillar.addColor(p, 'color').name('shaft colour');
+    pillar.addColor(p, 'coreColor').name('core colour');
+    R(pillar, p, 'intensity', 0, 6, 0.01, 'brightness');
+    R(pillar, p, 'corePower', 0.2, 8, 0.05, 'core tightness');
+    R(pillar, p, 'rimPower', 0.2, 10, 0.05, 'rim tightness');
+    R(pillar, p, 'rim', 0, 3, 0.01, 'rim strength');
+    R(pillar, p, 'topFade', 0.02, 0.95, 0.01, 'dissolves over (frac)');
+    R(pillar, p, 'streaks', 0, 2, 0.01, 'falling light');
+    R(pillar, p, 'streakScale', 0.1, 8, 0.05, 'streak scale');
+    R(pillar, p, 'streakSpeed', 0, 8, 0.05, 'streak speed');
+    R(pillar, p, 'pulse', 0, 1, 0.01, 'breath depth');
+    R(pillar, p, 'pulseSpeed', 0, 12, 0.05, 'breath speed');
+    R(pillar, p, 'flare', 1, 4, 0.01, 'foot flare x');
+    R(pillar, p, 'flareHeight', 0.005, 0.4, 0.005, 'flare reaches (frac)');
+    R(pillar, p, 'gatherHead', 0, 0.95, 0.01, 'fallen by end of gather');
+    R(pillar, p, 'arrivalWidth', 0, 3, 0.01, 'extra bore on arrival');
+    R(pillar, p, 'flashTime', 0.05, 2, 0.01, 'arrival flash (s)');
+
+    // Layer 3. One draw call however many there are, so `count` is very nearly
+    // free — the buffer is built for 24.
+    const ribbons = folder.addFolder('3 - The ribbons');
+    const r = a.ribbons;
+    R(ribbons, r, 'count', 0, 24, 1, 'how many');
+    ribbons.addColor(r, 'color').name('ribbon colour');
+    ribbons.addColor(r, 'coreColor').name('core colour');
+    R(ribbons, r, 'intensity', 0, 6, 0.01, 'brightness');
+    R(ribbons, r, 'radius', 0.1, 4, 0.01, 'ride out at (m)');
+    R(ribbons, r, 'height', 0.5, 12, 0.05, 'climb to (m)');
+    R(ribbons, r, 'turns', 0.1, 6, 0.05, 'turns per climb');
+    R(ribbons, r, 'span', 0.05, 1, 0.01, 'length (frac of climb)');
+    R(ribbons, r, 'speed', 0, 2, 0.01, 'climbs a second');
+    R(ribbons, r, 'swirl', -3, 3, 0.01, 'extra turn a second');
+    R(ribbons, r, 'width', 0.005, 0.5, 0.005, 'width (m)');
+    R(ribbons, r, 'topScale', 0.05, 1.5, 0.01, 'narrowed to, at the top');
+    R(ribbons, r, 'waist', 0, 0.6, 0.01, 'waist depth');
+    R(ribbons, r, 'softness', 0.2, 6, 0.05, 'edge falloff');
+    R(ribbons, r, 'corePower', 1, 16, 0.1, 'core tightness');
+
+    // Layer 4. One frame of white on the floor — the petals are the read, and
+    // the core is what makes the first two frames a hole rather than a fan.
+    const burst = folder.addFolder('4 - The burst');
+    const bu = a.burst;
+    R(burst, bu, 'radius', 0.5, 12, 0.1, 'reaches (m)');
+    R(burst, bu, 'life', 0.1, 3, 0.01, 'lasts (s)');
+    burst.addColor(bu, 'color').name('wave colour');
+    burst.addColor(bu, 'coreColor').name('core colour');
+    R(burst, bu, 'intensity', 0, 8, 0.05, 'brightness');
+    R(burst, bu, 'petals', 1, 48, 1, 'petals');
+    R(burst, bu, 'petalWidth', 0.005, 0.4, 0.005, 'petal width');
+    R(burst, bu, 'petalLength', 0.1, 1, 0.01, 'petal reach');
+    R(burst, bu, 'ringWidth', 0.005, 0.3, 0.005, 'front width');
+    R(burst, bu, 'softness', 0.005, 0.5, 0.005, 'feather');
+    R(burst, bu, 'core', 0, 6, 0.05, 'centre flash');
+    R(burst, bu, 'lift', 0, 0.3, 0.005, 'off the floor (m)');
+
+    // Layer 5. The only loose thing in the ability, and the reason the other
+    // four read as one event rather than as four decals in the same place.
+    const embers = folder.addFolder('5 - The embers');
+    const e = a.embers;
+    embers.addColor(e, 'color').name('mote colour');
+    embers.addColor(e, 'coreColor').name('core colour');
+    R(embers, e, 'intensity', 0, 6, 0.05, 'brightness');
+    R(embers, e, 'rate', 0, 120, 1, 'a second, while held');
+    R(embers, e, 'gatherRate', 0, 60, 1, 'a second, while gathering');
+    R(embers, e, 'burst', 0, 300, 1, 'on arrival');
+    R(embers, e, 'spread', 0.1, 2, 0.01, 'born within (frac of sigil)');
+    R(embers, e, 'life', 0.2, 8, 0.05, 'one lives (s)');
+    R(embers, e, 'speed', 0, 6, 0.05, 'leaves at (m/s)');
+    R(embers, e, 'spawnHeight', 0, 4, 0.05, 'born up to (m)');
+    R(embers, e, 'drag', 0.05, 6, 0.05, 'air resistance');
+    R(embers, e, 'rise', 0, 8, 0.05, 'pulled up at (m/s2)');
+    R(embers, e, 'size', 0.005, 0.4, 0.005, 'size (m)');
+    R(embers, e, 'grow', 0, 3, 0.01, 'grows by x');
+    R(embers, e, 'sway', 0, 2, 0.01, 'wander (m)');
+    R(embers, e, 'swaySpeed', 0, 6, 0.05, 'wander speed');
+    R(embers, e, 'halo', 0, 2, 0.01, 'halo');
+    R(embers, e, 'sharpness', 0.01, 0.6, 0.005, 'edge hardness');
+    R(embers, e, 'twinkle', 0, 1, 0.01, 'shimmer');
+    R(embers, e, 'spin', 0, 12, 0.05, 'turns at (rad/s)');
+
+    // The one part of it that lights anything at all.
+    const light = folder.addFolder('The light');
+    const l = a.light;
+    light.addColor(l, 'color').name('colour');
+    R(light, l, 'intensity', 0, 40, 0.1, 'while held');
+    R(light, l, 'flash', 0, 120, 0.5, 'on arrival');
+    R(light, l, 'height', 0, 1.5, 0.01, 'hangs at (frac of body)');
+    R(light, l, 'distance', 1, 40, 0.5, 'reaches (m)');
+    R(light, l, 'decay', 0.5, 4, 0.05, 'falloff');
+  }
+
+  /**
+   * Shadow Boost — the dark, and the seconds it leaves behind.
+   *
+   * Five layers again, one folder each, and laid out in the order they are
+   * drawn rather than the order they are noticed: the pool is at the bottom of
+   * the stack and is doing more for the read than anything above it.
+   *
+   * Three to reach for before the rest. `might` is what the ability is *worth*
+   * (it is the heavier of the two boons and the slower). `swirl -> stretch` is
+   * the single number that decides whether the shadow going round the body is a
+   * *spiral* or a cloud of blobs — it is how far each puff is drawn out along
+   * its own orbit, and at 1 the layer stops working. And `column -> shade`,
+   * which darkens the shaft's **edges** (not its middle — see
+   * `vfx/DarkPillar.js`): it is what gives the column an outside, and it is the
+   * slider to reach for if the shaft looks like a neon tube.
+   */
+  _buildShadowBoost() {
+    const folder = this.gui.addFolder('Shadow Boost (the dark)');
+    const s = settings.shadowBoost;
+    const R = Editor.range;
+
+    folder
+      .add({ cast: () => this.hooks.onCastShadowBoost?.() }, 'cast')
+      .name('Call it up (under you)');
+    folder.add(s, 'enabled').name('enabled');
+    R(folder, s, 'duration', 1, 60, 0.5, 'boon lasts (s)');
+    R(folder, s, 'warn', 0, 6, 0.1, 'warns for last (s)');
+    R(folder, s, 'haste', 1, 3, 0.01, 'movement x');
+    R(folder, s, 'might', 1, 4, 0.01, 'blows x');
+    R(folder, s, 'shake', 0, 1.5, 0.01, 'arrival shake (m)');
+
+    // The choreography. `duration` is not one of these — it is the beat between
+    // `erupt` and `fade`.
+    const beats = folder.addFolder('Beats (s)');
+    const b = s.beats;
+    R(beats, b, 'gather', 0.05, 3, 0.01, 'the pool opens');
+    R(beats, b, 'erupt', 0.05, 2, 0.01, 'the column comes up');
+    R(beats, b, 'settle', 0.05, 3, 0.01, 'the bore closes');
+    R(beats, b, 'fade', 0.1, 3, 0.01, 'drawn back down');
+
+    // Layer 1. No shape at all, and the thing every other layer is seen
+    // against — `falloff` is the whole control: low is a wash, high is a bloom.
+    const glow = folder.addFolder('1 - The base glow');
+    const g = s.glow;
+    R(glow, g, 'radius', 0.5, 8, 0.05, 'radius (m)');
+    R(glow, g, 'lift', 0, 0.4, 0.005, 'off the floor (m)');
+    glow.addColor(g, 'color').name('spill colour');
+    glow.addColor(g, 'coreColor').name('core colour');
+    R(glow, g, 'intensity', 0, 6, 0.05, 'brightness');
+    R(glow, g, 'falloff', 0.2, 8, 0.05, 'spill falloff');
+    R(glow, g, 'core', 0.02, 1, 0.01, 'hot middle (frac)');
+    R(glow, g, 'corePower', 0.2, 8, 0.05, 'core tightness');
+    R(glow, g, 'pulse', 0, 1, 0.01, 'breath depth');
+    R(glow, g, 'pulseSpeed', 0, 12, 0.05, 'breath speed');
+    R(glow, g, 'mottle', 0, 1, 0.01, 'mottling');
+    R(glow, g, 'mottleScale', 0.2, 8, 0.05, 'mottle scale');
+    R(glow, g, 'mottleSpeed', 0, 2, 0.01, 'mottle crawl');
+
+    // Layer 2. `trough` is the one that matters: it is the shadow behind each
+    // front, and it is what stands a drawn circle up off the floor.
+    const rings = folder.addFolder('2 - The ground distortion');
+    const r = s.rings;
+    R(rings, r, 'radius', 0.5, 12, 0.05, 'reaches (m)');
+    R(rings, r, 'lift', 0, 0.4, 0.005, 'off the floor (m)');
+    rings.addColor(r, 'color').name('front colour');
+    rings.addColor(r, 'coreColor').name('core colour');
+    R(rings, r, 'intensity', 0, 6, 0.05, 'brightness');
+    R(rings, r, 'rings', 1, 12, 1, 'fronts at once');
+    R(rings, r, 'speed', -3, 3, 0.01, 'fronts a second');
+    R(rings, r, 'width', 0.002, 0.2, 0.002, 'front width');
+    R(rings, r, 'softness', 0.002, 0.1, 0.002, 'feather');
+    R(rings, r, 'glow', 0, 2, 0.01, 'bloom off the line');
+    R(rings, r, 'glowWidth', 0.005, 0.6, 0.005, 'bloom reach');
+    R(rings, r, 'trough', 0, 2, 0.01, 'trough depth');
+    R(rings, r, 'troughWidth', 0.005, 0.4, 0.005, 'trough reach');
+    R(rings, r, 'warp', 0, 0.4, 0.005, 'distortion (frac)');
+    R(rings, r, 'warpScale', 0.2, 10, 0.05, 'distortion scale');
+    R(rings, r, 'warpSpeed', 0, 3, 0.01, 'distortion crawl');
+    R(rings, r, 'spin', -2, 2, 0.01, 'turns a second');
+
+    // Layer 3. Two tubes on one geometry — see `vfx/DarkPillar.js`. `shade` is
+    // the dark half and `rim` is the bright one, and the balance between them
+    // is the entire look of the column.
+    const column = folder.addFolder('3 - The dark column');
+    const c = s.column;
+    R(column, c, 'radius', 0.1, 4, 0.01, 'bore (m)');
+    R(column, c, 'height', 2, 40, 0.5, 'reaches up (m)');
+    column.addColor(c, 'color').name('energy colour');
+    column.addColor(c, 'coreColor').name('core colour');
+    column.addColor(c, 'shadeColor').name('shade colour');
+    R(column, c, 'intensity', 0, 4, 0.01, 'brightness');
+    R(column, c, 'shade', 0, 1, 0.01, 'edges darken by');
+    R(column, c, 'shadePower', 0.2, 8, 0.05, 'dark edge tightness');
+    R(column, c, 'corePower', 0.2, 8, 0.05, 'core tightness');
+    R(column, c, 'rimPower', 0.2, 10, 0.05, 'rim tightness');
+    R(column, c, 'rim', 0, 3, 0.01, 'rim accent');
+    R(column, c, 'topFade', 0.02, 0.95, 0.01, 'dissolves over (frac)');
+    R(column, c, 'streaks', 0, 2, 0.01, 'falling light');
+    R(column, c, 'streakScale', 0.1, 8, 0.05, 'streak scale');
+    R(column, c, 'streakSpeed', 0, 8, 0.05, 'streak speed');
+    R(column, c, 'veins', 0, 3, 0.01, 'lightning');
+    R(column, c, 'veinScale', 0.2, 10, 0.05, 'bolt scale');
+    R(column, c, 'veinRate', 0.5, 20, 0.1, 'strikes a second');
+    R(column, c, 'veinPower', 1, 20, 0.1, 'bolt thinness');
+    R(column, c, 'veinBranch', 0, 1, 0.01, 'forking');
+    R(column, c, 'front', 0, 1, 0.01, 'near wall worth x');
+    R(column, c, 'pulse', 0, 1, 0.01, 'breath depth');
+    R(column, c, 'pulseSpeed', 0, 12, 0.05, 'breath speed');
+    R(column, c, 'flare', 1, 4, 0.01, 'foot flare x');
+    R(column, c, 'flareHeight', 0.005, 0.4, 0.005, 'flare reaches (frac)');
+    R(column, c, 'arrivalWidth', 0, 3, 0.01, 'extra bore on arrival');
+    R(column, c, 'flashTime', 0.05, 2, 0.01, 'arrival flash (s)');
+
+    // Layer 4. One draw call however many there are, so `count` is very nearly
+    // free — the buffer is built for 24.
+    const wisps = folder.addFolder('4 - The rising wisps');
+    const w = s.wisps;
+    R(wisps, w, 'count', 0, 24, 1, 'how many');
+    wisps.addColor(w, 'color').name('smoke colour');
+    wisps.addColor(w, 'rimColor').name('fringe colour');
+    R(wisps, w, 'opacity', 0, 1, 0.01, 'opacity');
+    R(wisps, w, 'rim', 0, 2, 0.01, 'fringe strength');
+    R(wisps, w, 'radius', 0.1, 4, 0.01, 'stand out at (m)');
+    R(wisps, w, 'height', 0.5, 12, 0.05, 'climb to (m)');
+    R(wisps, w, 'curl', 0, 3, 0.01, 'turns per climb');
+    R(wisps, w, 'writhe', -3, 3, 0.01, 'extra turn a second');
+    R(wisps, w, 'sway', 0, 2, 0.01, 'wander (m)');
+    R(wisps, w, 'span', 0.05, 1, 0.01, 'length (frac of climb)');
+    R(wisps, w, 'speed', 0, 2, 0.01, 'climbs a second');
+    R(wisps, w, 'width', 0.01, 1.5, 0.01, 'width at the foot (m)');
+    R(wisps, w, 'spread', 0.2, 4, 0.01, 'widens to x');
+    R(wisps, w, 'topScale', 0.2, 3, 0.01, 'stands out to x');
+    R(wisps, w, 'softness', 0.2, 6, 0.05, 'edge falloff');
+    R(wisps, w, 'detail', 0.2, 10, 0.05, 'tear scale');
+    R(wisps, w, 'churn', 0, 3, 0.01, 'tear crawl');
+    R(wisps, w, 'erode', 0, 1.5, 0.01, 'eaten away by');
+
+    // Layer 5. The fast layer, against the wisps' slow one. `spin` first.
+    const swirl = folder.addFolder('5 - The swirling shadow');
+    const sw = s.swirl;
+    swirl.addColor(sw, 'color').name('smoke colour');
+    swirl.addColor(sw, 'rimColor').name('fringe colour');
+    R(swirl, sw, 'opacity', 0, 1, 0.01, 'opacity');
+    R(swirl, sw, 'rim', 0, 2, 0.01, 'fringe strength');
+    R(swirl, sw, 'rate', 0, 120, 1, 'a second, while held');
+    R(swirl, sw, 'gatherRate', 0, 60, 1, 'a second, while gathering');
+    R(swirl, sw, 'burst', 0, 300, 1, 'on arrival');
+    R(swirl, sw, 'spread', 0.1, 2, 0.01, 'born within (frac of pool)');
+    R(swirl, sw, 'life', 0.2, 8, 0.05, 'one lives (s)');
+    R(swirl, sw, 'spin', -8, 8, 0.05, 'winds at (rad/s)');
+    swirl.add(sw, 'reverse').name('half turn the other way');
+    R(swirl, sw, 'widen', -1, 2, 0.01, 'orbit widens by');
+    R(swirl, sw, 'rise', -2, 6, 0.05, 'lifts at (m/s)');
+    R(swirl, sw, 'spawnHeight', 0, 4, 0.05, 'born up to (m)');
+    R(swirl, sw, 'size', 0.02, 2, 0.01, 'size (m)');
+    R(swirl, sw, 'grow', 0, 3, 0.01, 'grows by x');
+    R(swirl, sw, 'stretch', 1, 8, 0.05, 'drawn out along orbit x');
+    R(swirl, sw, 'wobble', 0, 2, 0.01, 'wander (m)');
+    R(swirl, sw, 'wobbleSpeed', 0, 6, 0.05, 'wander speed');
+    R(swirl, sw, 'detail', 0.2, 6, 0.05, 'tear scale');
+    R(swirl, sw, 'churn', 0, 3, 0.01, 'tear crawl');
+    R(swirl, sw, 'softness', 0.01, 0.8, 0.01, 'inner feather');
+    R(swirl, sw, 'erode', 0, 1.5, 0.01, 'eaten away by');
+
+    // And the one part of it that lights anything at all — which a dark aura
+    // needs more than a bright one does, not less.
+    const light = folder.addFolder('The light');
+    const l = s.light;
+    light.addColor(l, 'color').name('colour');
+    R(light, l, 'intensity', 0, 40, 0.1, 'while held');
+    R(light, l, 'flash', 0, 120, 0.5, 'on arrival');
+    R(light, l, 'height', 0, 1.5, 0.01, 'hangs at (frac of body)');
+    R(light, l, 'distance', 1, 40, 0.5, 'reaches (m)');
+    R(light, l, 'decay', 0.5, 4, 0.05, 'falloff');
+  }
+
+  /**
    * Flight, and the blades it hangs in the air — see `vfx/BladeStorm.js`.
    *
    * Three numbers before any of the others: `height` (how far off the floor the
@@ -1387,6 +1721,10 @@ export class Editor {
     this._buildAttack(folder, settings.slashHit, 'Slash hit (R)');
     this._buildAttack(folder, settings.crouchSlash, 'Slide cut (T)');
     this._buildAttack(folder, settings.flipKick, 'Flip kick (Q)');
+    this._buildAttack(folder, settings.swordCombo, 'Sword combo (Z)');
+    this._buildSwordCombo(folder);
+    this._buildAttack(folder, settings.voidBeam, 'Unmaking (B)');
+    this._buildVoidBeam(folder);
     this._buildTargetRing(folder);
     this._buildSlice(folder);
 
@@ -1467,6 +1805,10 @@ export class Editor {
     R(aim, config, 'cone', 20, 360, 1, 'lock cone (°)');
     R(aim, config, 'standoff', 0.4, 2.5, 0.01, 'strike from (m)');
     R(aim, config, 'maxWarp', 0, 12, 0.05, 'max step in (m)');
+    // Only the combo states one: it stands still and throws for two thirds of
+    // its clip before it closes, and the gap between this and `warpAt` is the
+    // dash. Everything else begins closing on the frame it starts.
+    if ('warpFrom' in config) R(aim, config, 'warpFrom', 0, 0.9, 0.01, 'approach starts at');
     R(aim, config, 'warpAt', 0.05, 0.9, 0.01, 'approach ends at');
     R(aim, config, 'turnAt', 0.05, 1, 0.01, 'turn done by');
     // Only the two moves that do not stop on their mark carry these, so they
@@ -1503,6 +1845,324 @@ export class Editor {
     // A fact about the move, not about the body it lands on — which is why it
     // is a field here and not in the enemies' block.
     if ('slices' in config) impact.add(config, 'slices').name('cuts in half');
+  }
+
+
+  /**
+   * Everything the three-hit combo throws — see `vfx/SwordCombo.js`.
+   *
+   * The move's own numbers are in the `Sword combo (Z)` folder above, with
+   * every other attack's, because it is the same machine as they are. This is
+   * only the part of it that is *light*, and it is a folder of its own for the
+   * same reason `Judgement` has one: there is far more of it than of the move.
+   *
+   * If only one control here is ever touched, make it the crescent's `razor` —
+   * it is where the hard white line sits along the leading edge, and it is the
+   * whole difference between a cut and a glowing ribbon.
+   */
+  _buildSwordCombo(parent) {
+    const folder = parent.addFolder('Sword combo VFX');
+    const R = Editor.range;
+    const c = settings.swordCombo;
+
+    // The crescents themselves: what is thrown, and what it is made of.
+    const wave = folder.addFolder('Thrown cuts');
+    wave.add(c.wave, 'enabled').name('enabled');
+    R(wave, c.wave, 'aimHeight', 0, 2.2, 0.01, 'aimed at height (m)');
+    R(wave, c.wave, 'size', 0.4, 4, 0.05, 'arc radius (m)');
+    R(wave, c.wave, 'speed', 8, 90, 1, 'travels at (m/s)');
+    R(wave, c.wave, 'life', 0.2, 3, 0.05, 'expires after (s)');
+    R(wave, c.wave, 'hold', 0.05, 1, 0.01, 'hangs on contact (s)');
+    R(wave, c.wave, 'finishLife', 0.1, 1.5, 0.01, 'finisher arc holds (s)');
+    R(wave, c.wave, 'homing', 0, 12, 0.1, 'steers at (1/s)');
+
+    // The shape. `converge` and `tipTaper` decide the silhouette, `razor` and
+    // `erode` decide whether it reads as an edge or as smoke.
+    const shape = wave.addFolder('Shape');
+    R(shape, c.wave, 'spread', 0.6, 3.1, 0.01, 'arc subtends (rad)');
+    R(shape, c.wave, 'converge', 0, 0.95, 0.01, 'inner edge bows in');
+    R(shape, c.wave, 'bow', 0, 1, 0.01, 'bowed back by');
+    R(shape, c.wave, 'tail', 0, 2, 0.01, 'veil length (× radius)');
+    R(shape, c.wave, 'tipTaper', 0.15, 2, 0.01, 'tip sharpness');
+    R(shape, c.wave, 'razor', 0.5, 0.995, 0.005, 'edge line at');
+    R(shape, c.wave, 'erode', 0, 3, 0.01, 'veil eaten by');
+    R(shape, c.wave, 'grow', 0, 1.5, 0.01, 'opens over flight by');
+
+    const waveColour = wave.addFolder('Colour');
+    waveColour.addColor(c.wave, 'coreColor').name('edge line');
+    waveColour.addColor(c.wave, 'edgeColor').name('edge glow');
+    waveColour.addColor(c.wave, 'bodyColor').name('body');
+    waveColour.addColor(c.wave, 'tailColor').name('veil');
+    R(waveColour, c.wave, 'intensity', 0, 10, 0.05, 'brightness');
+
+    // The finisher's own shape, and the only thing in the move that is not a
+    // cut. Five layers, one sub-folder each, in the order they are drawn — and
+    // every one of them has an `enabled` at the top of its folder so it can be
+    // soloed against the other four, which is the only sane way to tune a stack
+    // of additive light.
+    const rift = folder.addFolder('Finisher burst');
+    rift.add(c.rift, 'enabled').name('enabled');
+
+    // 1. The air around it, lit. There is no bloom pass worth the name on this
+    //    stage, so this layer is the glow.
+    const halo = rift.addFolder('1 · Halo');
+    halo.add(c.rift, 'haloEnabled').name('enabled');
+    R(halo, c.rift, 'haloRadius', 0.5, 14, 0.1, 'reaches (m)');
+    R(halo, c.rift, 'haloLife', 0.1, 2, 0.01, 'lasts (s)');
+    R(halo, c.rift, 'haloIntensity', 0, 6, 0.05, 'brightness');
+    halo.addColor(c.rift, 'haloColor').name('inner');
+    halo.addColor(c.rift, 'haloEdgeColor').name('outer');
+
+    // 2. The sphere, drawn on its rim. `rim tightness` is the control: high is
+    //    a shell, low is a ball.
+    const shell = rift.addFolder('2 · Shell');
+    R(shell, c.rift, 'radius', 0.3, 6, 0.05, 'reaches (m)');
+    R(shell, c.rift, 'life', 0.1, 2, 0.01, 'lasts (s)');
+    R(shell, c.rift, 'fresnel', 0.4, 6, 0.05, 'rim tightness');
+    R(shell, c.rift, 'churn', 0, 1, 0.01, 'surface displaced by');
+    R(shell, c.rift, 'churnSpeed', 0, 8, 0.05, 'surface crawls at');
+    R(shell, c.rift, 'intensity', 0, 10, 0.05, 'brightness');
+    shell.addColor(c.rift, 'coreColor').name('flash (shared)');
+    shell.addColor(c.rift, 'rimColor').name('rim');
+    shell.addColor(c.rift, 'deepColor').name('interior');
+
+    // 3. The grain inside it. `smear` is what stops the field strobing.
+    const motes = rift.addFolder('3 · Core');
+    motes.add(c.rift, 'moteEnabled').name('enabled');
+    R(motes, c.rift, 'moteCount', 0, 320, 1, 'motes (cost)');
+    R(motes, c.rift, 'moteReach', 0.2, 8, 0.05, 'thrown to (m)');
+    R(motes, c.rift, 'moteLife', 0.1, 2, 0.01, 'last (s)');
+    R(motes, c.rift, 'moteSize', 0.005, 0.2, 0.001, 'size (m)');
+    R(motes, c.rift, 'moteStretch', 0, 0.1, 0.001, 'smear');
+    R(motes, c.rift, 'escape', 0, 0.6, 0.01, 'fraction escaping');
+    R(motes, c.rift, 'escapeReach', 0, 6, 0.05, 'escapees go × further');
+    R(motes, c.rift, 'moteIntensity', 0, 10, 0.05, 'brightness');
+    motes.addColor(c.rift, 'moteColor').name('colour');
+
+    // 4. The shockwave, outrunning the shell on three planes.
+    const rings = rift.addFolder('4 · Rings');
+    R(rings, c.rift, 'ringRadius', 0.3, 10, 0.05, 'reach (m)');
+    R(rings, c.rift, 'ringLife', 0.1, 2, 0.01, 'last (s)');
+    R(rings, c.rift, 'ringWidth', 0.01, 0.4, 0.005, 'band width');
+    R(rings, c.rift, 'ringSoftness', 0.01, 0.5, 0.005, 'band feather');
+    R(rings, c.rift, 'ringSpin', 0, 10, 0.05, 'turn at (rad/s)');
+    R(rings, c.rift, 'spokes', 0, 60, 1, 'spokes');
+    R(rings, c.rift, 'spokeDepth', 0, 1, 0.01, 'spoke depth');
+    R(rings, c.rift, 'ringIntensity', 0, 10, 0.05, 'brightness');
+    rings.addColor(c.rift, 'ringColor').name('colour');
+
+    // 5. The needles. `reach` is the single strongest control over the shape of
+    //    the finisher; `out of plane` is what stops it being a flat sun.
+    const shards = rift.addFolder('5 · Shards');
+    shards.add(c.rift, 'shardEnabled').name('enabled');
+    R(shards, c.rift, 'shardCount', 0, 28, 1, 'needles');
+    R(shards, c.rift, 'shardLength', 0.5, 12, 0.1, 'reach (m)');
+    R(shards, c.rift, 'shardWidth', 0.005, 0.3, 0.005, 'width (m)');
+    R(shards, c.rift, 'shardLife', 0.05, 1.2, 0.01, 'last (s)');
+    R(shards, c.rift, 'shardRoot', 0, 0.6, 0.01, 'root starts at (× reach)');
+    R(shards, c.rift, 'shardBias', 0, 1, 0.01, 'out of plane');
+    R(shards, c.rift, 'shardIntensity', 0, 10, 0.05, 'brightness');
+    shards.addColor(c.rift, 'shardColor').name('colour');
+
+    // The flash and the shower — `vfx/BladeImpact.js`, and the three
+    // multipliers that separate leaving, landing and finishing.
+    const impact = folder.addFolder('Flash & sparks');
+    impact.add(c.impact, 'enabled').name('enabled');
+    R(impact, c, 'launchFlash', 0, 3, 0.05, 'flash on leaving ×');
+    R(impact, c, 'arriveFlash', 0, 3, 0.05, 'flash on landing ×');
+    R(impact, c, 'finishFlash', 0, 4, 0.05, 'flash on finisher ×');
+    R(impact, c.impact, 'life', 0.05, 1, 0.01, 'flash life (s)');
+    R(impact, c.impact, 'size', 0.1, 3, 0.05, 'flash size (m)');
+    R(impact, c.impact, 'intensity', 0, 10, 0.05, 'brightness');
+    R(impact, c.impact, 'spikes', 0, 16, 1, 'star spikes');
+    R(impact, c.impact, 'spikeLength', 0, 4, 0.05, 'spike reach');
+    R(impact, c.impact, 'sparks', 0, 300, 1, 'sparks');
+    R(impact, c.impact, 'sparkSpeed', 0, 30, 0.1, 'spark speed (m/s)');
+    R(impact, c.impact, 'sparkSpread', 0, 1.3, 0.01, 'spark cone (rad)');
+    R(impact, c.impact, 'sparkLife', 0.05, 2, 0.01, 'spark life (s)');
+    R(impact, c.impact, 'sparkSize', 0.005, 0.15, 0.001, 'spark size (m)');
+    R(impact, c.impact, 'sparkStretch', 0, 0.2, 0.001, 'spark streak');
+    R(impact, c.impact, 'sparkDrag', 0.05, 6, 0.05, 'spark drag');
+    R(impact, c.impact, 'sparkGravity', -40, 0, 0.5, 'spark gravity');
+    impact.addColor(c.impact, 'color').name('flash colour');
+    impact.addColor(c.impact, 'ringColor').name('ring colour');
+    impact.addColor(c.impact, 'sparkColor').name('spark colour');
+
+    // The ground's answer under the finisher — the judgement's system again.
+    const shock = folder.addFolder('Ground wave');
+    shock.add(c.shock, 'enabled').name('enabled');
+    R(shock, c.shock, 'radius', 0.5, 10, 0.1, 'reaches (m)');
+    R(shock, c.shock, 'life', 0.1, 2, 0.01, 'takes (s)');
+    R(shock, c.shock, 'intensity', 0, 8, 0.05, 'brightness');
+    R(shock, c.shock, 'width', 0.005, 0.4, 0.005, 'front width');
+    R(shock, c.shock, 'softness', 0.005, 0.4, 0.005, 'front feather');
+    R(shock, c.shock, 'cracks', 0, 30, 1, 'cracks');
+    R(shock, c.shock, 'crackLength', 0, 1.5, 0.01, 'crack reach');
+    R(shock, c.shock, 'crackWidth', 0.001, 0.1, 0.001, 'crack width');
+    R(shock, c.shock, 'crackGlow', 0, 4, 0.05, 'crack glow');
+    R(shock, c.shock, 'lift', 0, 0.2, 0.001, 'lifted off floor (m)');
+    shock.addColor(c.shock, 'color').name('front colour');
+    shock.addColor(c.shock, 'crackColor').name('crack colour');
+
+    // One light for all of it. `decay` is the control that matters — long
+    // enough and the whole combo is lit from its own cuts.
+    const light = folder.addFolder('Light');
+    R(light, c.light, 'intensity', 0, 120, 1, 'peak');
+    R(light, c.light, 'range', 2, 40, 0.5, 'carries (m)');
+    R(light, c.light, 'decay', 0.05, 1.5, 0.01, 'decays over (s)');
+    R(light, c.light, 'launch', 0, 1, 0.01, 'on leaving ×');
+    R(light, c.light, 'arrive', 0, 1, 0.01, 'on landing ×');
+    R(light, c.light, 'finish', 0, 1, 0.01, 'on finisher ×');
+    light.addColor(c.light, 'color').name('colour');
+  }
+
+  /**
+   * Everything the unmaking calls up — see `vfx/RunicBeam.js`.
+   *
+   * The move's own numbers are in the `Unmaking (B)` folder above, with every
+   * other attack's, because it is the same machine as they are. This is the
+   * part of it that is *light*, plus the one block that is neither — `unmake`,
+   * which is how a body taken by the beam goes away.
+   *
+   * Five layers, a sub-folder each, in the order they are drawn, and every one
+   * with an `enabled` at the top of its folder so it can be soloed against the
+   * other four.
+   *
+   * If only one control here is ever touched, make it the beam's `axis gather`:
+   * it is the exponent on how square a piece of the wall is to the lens, and it
+   * is the whole difference between a column of light and a glowing pipe.
+   */
+  _buildVoidBeam(parent) {
+    const folder = parent.addFolder('Unmaking VFX');
+    const R = Editor.range;
+    const c = settings.voidBeam;
+
+    // The pacing. `charge` is the odd one: it is a timeout rather than a beat,
+    // and it has to stay longer than the gap between the clip's two strikes.
+    const beats = folder.addFolder('Timing');
+    R(beats, c.beats, 'open', 0.05, 1.5, 0.01, 'rune writes over (s)');
+    R(beats, c.beats, 'charge', 0.2, 3, 0.01, 'gathers for, max (s)');
+    R(beats, c.beats, 'strike', 0.05, 1, 0.01, 'column rises in (s)');
+    R(beats, c.beats, 'hold', 0.1, 4, 0.05, 'stands for (s)');
+    R(beats, c.beats, 'close', 0.05, 2, 0.01, 'pinches out over (s)');
+    R(beats, c.beats, 'ripple', 0.05, 1.5, 0.01, 'rune ripple (s)');
+
+    // 1. The circle on the ground. The same shader the judgement's seal uses.
+    const seal = folder.addFolder('1 · Runes');
+    R(seal, c.seal, 'radius', 0.4, 6, 0.05, 'radius (m)');
+    R(seal, c.seal, 'lift', 0, 0.3, 0.005, 'off the floor (m)');
+    R(seal, c.seal, 'intensity', 0, 6, 0.05, 'brightness');
+    R(seal, c.seal, 'spin', -1, 1, 0.005, 'turns a second');
+    R(seal, c.seal, 'ticks', 4, 120, 1, 'ticks');
+    R(seal, c.seal, 'runes', 3, 40, 1, 'glyphs');
+    R(seal, c.seal, 'spokes', 2, 24, 1, 'spokes');
+    R(seal, c.seal, 'width', 0.002, 0.06, 0.001, 'stroke weight');
+    R(seal, c.seal, 'softness', 0.002, 0.06, 0.001, 'stroke feather');
+    R(seal, c.seal, 'haze', 0, 1.5, 0.01, 'light pooled inside');
+    R(seal, c.seal, 'detail', 0, 1, 0.01, 'how mottled');
+    R(seal, c.seal, 'pulse', 0, 1, 0.01, 'breath depth');
+    R(seal, c.seal, 'pulseSpeed', 0, 14, 0.1, 'breath speed');
+    seal.addColor(c.seal, 'color').name('lines');
+    seal.addColor(c.seal, 'coreColor').name('centre');
+
+    // 2. The column. `axis gather` is the control; everything else dresses it.
+    const beam = folder.addFolder('2 · Beam');
+    beam.add(c.beam, 'enabled').name('enabled');
+    R(beam, c.beam, 'height', 1, 20, 0.1, 'height (m)');
+    R(beam, c.beam, 'radius', 0.05, 3, 0.01, 'radius (m)');
+    R(beam, c.beam, 'flare', 0, 2, 0.01, 'foot flare');
+    R(beam, c.beam, 'swell', 0, 1.5, 0.01, 'swell on opening');
+    R(beam, c.beam, 'breathe', 0, 0.2, 0.005, 'breath depth');
+    R(beam, c.beam, 'breatheSpeed', 0, 20, 0.1, 'breath speed');
+    R(beam, c.beam, 'corePower', 0.2, 10, 0.05, 'axis gather');
+    R(beam, c.beam, 'glowPower', 0.1, 4, 0.05, 'glow spread');
+    R(beam, c.beam, 'grain', 0.2, 12, 0.05, 'features up it');
+    R(beam, c.beam, 'swirl', 0.2, 6, 0.05, 'features round it');
+    R(beam, c.beam, 'flow', 0, 8, 0.05, 'falls at');
+    R(beam, c.beam, 'erode', 0, 1.5, 0.01, 'eaten by noise');
+    R(beam, c.beam, 'headWidth', 0.005, 0.4, 0.005, 'head band');
+    R(beam, c.beam, 'footGlow', 0.01, 0.6, 0.005, 'foot bloom');
+    R(beam, c.beam, 'crown', 0.1, 0.999, 0.005, 'top fades from');
+    R(beam, c.beam, 'intensity', 0, 8, 0.05, 'brightness');
+    beam.addColor(c.beam, 'coreColor').name('axis');
+    beam.addColor(c.beam, 'innerColor').name('body');
+    beam.addColor(c.beam, 'edgeColor').name('edges');
+
+    // 3. The cords. `count` is capped at 6 by the buffer they share.
+    const spiral = folder.addFolder('3 · Spirals');
+    spiral.add(c.spiral, 'enabled').name('enabled');
+    R(spiral, c.spiral, 'count', 0, 6, 1, 'cords');
+    R(spiral, c.spiral, 'radius', 0.05, 3, 0.01, 'radius (m)');
+    R(spiral, c.spiral, 'reach', 0.1, 1.2, 0.01, 'run × the height');
+    R(spiral, c.spiral, 'turns', 0.2, 8, 0.05, 'turns');
+    R(spiral, c.spiral, 'width', 0.005, 0.4, 0.005, 'width (m)');
+    R(spiral, c.spiral, 'taper', 0, 1, 0.01, 'width left at the top');
+    R(spiral, c.spiral, 'spin', -8, 8, 0.05, 'winds at (rad/s)');
+    R(spiral, c.spiral, 'flare', 0, 2, 0.01, 'opens out by');
+    R(spiral, c.spiral, 'sharpness', 0.5, 8, 0.05, 'edge falloff');
+    R(spiral, c.spiral, 'pulse', 0, 40, 0.5, 'waves along it');
+    R(spiral, c.spiral, 'intensity', 0, 8, 0.05, 'brightness');
+    spiral.addColor(c.spiral, 'coreColor').name('middle');
+    spiral.addColor(c.spiral, 'colorA').name('cord A');
+    spiral.addColor(c.spiral, 'colorB').name('cord B');
+
+    // 4. The burst at its foot — the blades' own system again.
+    const impact = folder.addFolder('4 · Burst');
+    impact.add(c.impact, 'enabled').name('enabled');
+    R(impact, c, 'strikeFlash', 0, 3, 0.05, 'size ×');
+    R(impact, c, 'impactHeight', 0, 3, 0.05, 'thrown at height (m)');
+    R(impact, c.impact, 'life', 0.05, 1.5, 0.01, 'flash life (s)');
+    R(impact, c.impact, 'size', 0.1, 4, 0.05, 'flash size (m)');
+    R(impact, c.impact, 'intensity', 0, 10, 0.05, 'brightness');
+    R(impact, c.impact, 'spikes', 0, 16, 1, 'star spikes');
+    R(impact, c.impact, 'spikeLength', 0, 4, 0.05, 'spike reach');
+    R(impact, c.impact, 'sparks', 0, 300, 1, 'sparks');
+    R(impact, c.impact, 'sparkSpeed', 0, 30, 0.1, 'spark speed (m/s)');
+    R(impact, c.impact, 'sparkSpread', 0, 1.3, 0.01, 'spark cone (rad)');
+    R(impact, c.impact, 'sparkLife', 0.05, 2, 0.01, 'spark life (s)');
+    R(impact, c.impact, 'sparkSize', 0.005, 0.15, 0.001, 'spark size (m)');
+    R(impact, c.impact, 'sparkStretch', 0, 0.2, 0.001, 'spark streak');
+    R(impact, c.impact, 'sparkDrag', 0.05, 6, 0.05, 'spark drag');
+    R(impact, c.impact, 'sparkGravity', -40, 0, 0.5, 'spark gravity');
+    impact.addColor(c.impact, 'color').name('flash colour');
+    impact.addColor(c.impact, 'ringColor').name('ring colour');
+    impact.addColor(c.impact, 'sparkColor').name('spark colour');
+
+    // 5. The grain. `count` is nearly free — each shard is a closed form.
+    const grain = folder.addFolder('5 · Grain');
+    grain.add(c.grain, 'enabled').name('enabled');
+    R(grain, c.grain, 'count', 0, 320, 1, 'shards');
+    R(grain, c.grain, 'radius', 0.05, 4, 0.05, 'start out at (m)');
+    R(grain, c.grain, 'spread', 0, 4, 0.05, 'drift out by (m)');
+    R(grain, c.grain, 'rise', 0.5, 16, 0.1, 'climb (m)');
+    R(grain, c.grain, 'swirl', -10, 10, 0.05, 'turn at (rad/s)');
+    R(grain, c.grain, 'size', 0.005, 0.4, 0.005, 'size (m)');
+    R(grain, c.grain, 'life', 0.2, 6, 0.05, 'one loop takes (s)');
+    R(grain, c.grain, 'spike', 1, 16, 0.1, 'needle length');
+    R(grain, c.grain, 'intensity', 0, 8, 0.05, 'brightness');
+    grain.addColor(c.grain, 'color').name('shard');
+    grain.addColor(c.grain, 'coreColor').name('centre');
+
+    // The light, hung partway up rather than at the foot.
+    const light = folder.addFolder('Light');
+    R(light, c.light, 'intensity', 0, 200, 1, 'peak');
+    R(light, c.light, 'range', 2, 45, 0.5, 'carries (m)');
+    R(light, c.light, 'decay', 0.05, 2, 0.01, 'flash decays over (s)');
+    R(light, c.light, 'height', 0, 1, 0.01, 'hangs at × the height');
+    R(light, c.light, 'hold', 0, 2, 0.01, 'standing ×');
+    R(light, c.light, 'gather', 0, 2, 0.01, 'gathering ×');
+    light.addColor(c.light, 'color').name('colour');
+
+    // Not light at all: how the body it takes goes away. It is here rather than
+    // in `Enemies` for the same reason `cuts in half` is on the move — what
+    // killed a body decides how it leaves, and this block is that decision.
+    const unmake = folder.addFolder('The burn');
+    R(unmake, c.unmake, 'corpseTime', 0, 6, 0.05, 'lies there (s)');
+    R(unmake, c.unmake, 'dissolveTime', 0.1, 6, 0.05, 'burns away over (s)');
+    R(unmake, c.unmake, 'edgeEmissive', 0, 20, 0.1, 'burn line heat');
+    R(unmake, c.unmake, 'edgeWidth', 0.01, 0.6, 0.005, 'burn line width');
+    R(unmake, c.unmake, 'dissolveRise', 0, 1, 0.01, 'burns bottom-up by');
+    unmake.addColor(c.unmake, 'edgeColor').name('burn line');
   }
 
   /**

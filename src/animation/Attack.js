@@ -5,10 +5,23 @@ import { settings } from '../config/settings.js';
  * One melee attack: the clip, its blend over the gait, and the warp that aims it.
  *
  * There is one of these per move — the kick (`E`), the slash hit (`R`), the
- * slide cut (`T`) and the flip kick (`Q`) are all instances, differing only in
- * the clip they were handed and the `configKey` they read their numbers from.
- * Anything that has to be true of *an* attack lives here; anything that makes
- * one of them feel like itself is a number in `config/settings.js`.
+ * slide cut (`T`), the flip kick (`Q`) and the sword combo (`Z`) are all
+ * instances, differing only in the clip they were handed and the `configKey`
+ * they read their numbers from. Anything that has to be true of *an* attack
+ * lives here; anything that makes one of them feel like itself is a number in
+ * `config/settings.js`.
+ *
+ * ## One blow, or several
+ *
+ * Most moves land once, at `hitAt`, and say nothing else. A move whose clip
+ * swings more than once states its blows as `hits` instead — an array of
+ * `{ at, ... }` in clip-normalised time, thrown in order, each one carrying
+ * whatever the thing wired to `onHit` needs to tell them apart. The array is
+ * handed straight back through the callback, so this class never learns what a
+ * beat *means*; it only knows which frame each one is on.
+ *
+ * `hitAt` is still the field that names a contact for everything else, and a
+ * move without `hits` takes exactly the path it always did.
  *
  * ## Why a warp
  *
@@ -30,6 +43,12 @@ import { settings } from '../config/settings.js';
  * order a person does it in: you face what you are about to hit, then you close
  * on it.
  *
+ * The step does not have to begin at the start of the clip. `warpFrom` says
+ * which frame it does begin on, and it is what lets a move hold its ground for
+ * a while before committing — the combo throws two cuts from where it stands
+ * and only dashes in for the third. The turn is unaffected: a body still faces
+ * what it is throwing at, from the first frame.
+ *
  * ## What it owns
  *
  * Not the transform. Like `Jump`, this class only *resolves* where the body
@@ -46,12 +65,16 @@ export class Attack {
    * @param {import('three').AnimationMixer} mixer
    * @param {import('three').AnimationClip|null} clip
    * @param {import('./CharacterController.js').CharacterController} character
-   * @param {{configKey?: string, onHit?: (target: object, dirX: number, dirZ: number) => void}} options
+   * @param {{configKey?: string, onHit?: (target: object, dirX: number, dirZ: number, beat: object|null) => void}} options
+   *   `beat` is the `hits` entry that fired, or null for a move that lands once
    */
   constructor(mixer, clip, character, { configKey = 'kick', onHit = null } = {}) {
     this.character = character;
     this.configKey = configKey;
-    /** Called once, on the frame the foot connects with a target still in reach. */
+    /**
+     * Called on the frame a blow connects with a target still in reach — once
+     * for most moves, once per entry in `hits` for a combo.
+     */
     this.onHit = onHit;
 
     this.action = null;
@@ -77,9 +100,17 @@ export class Attack {
      */
     this.warp = { active: false, x: 0, z: 0, yaw: 0 };
 
-    /** The body this swing was aimed at. Cleared the moment it is struck. */
+    /**
+     * The body this swing was aimed at. Cleared once the *last* blow is thrown.
+     *
+     * A single-hit move therefore clears it on its one contact, exactly as it
+     * always did; a combo holds the same body across all three of its beats,
+     * which is what makes it a combo rather than three swings that happen to
+     * be adjacent.
+     */
     this.target = null;
-    this._struck = false;
+    /** How many of this move's blows have been thrown so far. */
+    this._hit = 0;
     /** Where the body started, and the spot the clip wants it to finish on. */
     this._from = { x: 0, z: 0, yaw: 0 };
     this._to = { x: 0, z: 0, yaw: 0 };
@@ -164,7 +195,7 @@ export class Attack {
 
     this.weight = 0;
     this.locked = true;
-    this._struck = false;
+    this._hit = 0;
     this.target = target;
     this._resolveWarp(target);
     return true;
@@ -260,9 +291,19 @@ export class Attack {
     if (this.locked) {
       this._advanceWarp(phase, config);
 
-      if (!this._struck && phase >= config.hitAt) {
-        this._struck = true;
-        this._strike(config);
+      // Every blow this move has reached, in order. A move with no `hits` has
+      // exactly one, at `hitAt` — which is the path every attack but the combo
+      // takes, and the reason `hitAt` is still the field that names a contact.
+      const beats = config.hits;
+      if (beats) {
+        while (this._hit < beats.length && phase >= beats[this._hit].at) {
+          const beat = beats[this._hit];
+          this._hit++;
+          this._strike(config, beat, this._hit >= beats.length);
+        }
+      } else if (this._hit === 0 && phase >= config.hitAt) {
+        this._hit = 1;
+        this._strike(config, null, true);
       }
 
       // Past the recovery the clip is only settling back onto its feet; the
@@ -297,8 +338,20 @@ export class Attack {
     const from = this._from;
     const to = this._to;
     const warpAt = Math.max(0.01, config.warpAt);
-    const t = MathUtils.clamp(phase / warpAt, 0, 1);
-    const turn = smootherstep(MathUtils.clamp(t / Math.max(0.05, config.turnAt), 0, 1));
+    // Where the *step* begins. Almost every move starts closing on the frame it
+    // starts, and leaves this at zero. The combo does not: it throws two cuts
+    // from where it is standing and only then dashes in for the third, so its
+    // approach begins two thirds of the way through its own clip. Everything
+    // below is unchanged by that — the window is simply narrower and later.
+    const warpFrom = MathUtils.clamp(config.warpFrom ?? 0, 0, warpAt - 0.01);
+    const t = MathUtils.clamp((phase - warpFrom) / (warpAt - warpFrom), 0, 1);
+    // The turn is measured against the clip rather than against that window, so
+    // a move that steps in late still *faces* what it is about to throw at from
+    // the beginning. Stated as an absolute phase, which is what it always was —
+    // for a move starting at zero this is the same expression it used to be.
+    const turn = smootherstep(
+      MathUtils.clamp(phase / Math.max(1e-3, warpAt * Math.max(0.05, config.turnAt)), 0, 1)
+    );
 
     const passThrough = config.passThrough ?? 0;
     if (passThrough !== 0) {
@@ -364,22 +417,33 @@ export class Attack {
    * The reach test is taken *now* rather than trusted from the press: the
    * target may have died to something else in the meantime, and a kick that
    * connects with a corpse it never reached is worse than one that misses.
+   *
+   * @param {object} config the move's settings block
+   * @param {object|null} beat the `hits` entry that fired, if the move has any
+   * @param {boolean} last whether this was the move's final blow
    */
-  _strike(config) {
+  _strike(config, beat, last) {
     const target = this.target;
-    this.target = null;
+    // Only the last blow gives the body up. A combo's opening beats are thrown
+    // at the same body the finisher is for, and clearing it on the first would
+    // leave the other two swinging at nobody.
+    if (last) this.target = null;
     if (!target || target.alive === false) return;
 
     const position = this.character.position;
     const dx = target.position.x - position.x;
     const dz = target.position.z - position.z;
-    if (Math.hypot(dx, dz) > config.reach) return;
+    // A beat may state its own reach, and the ranged ones have to: the combo's
+    // first two cuts are *thrown*, from wherever the body happens to be
+    // standing, and testing them against the distance a sword covers would
+    // refuse every one of them.
+    if (Math.hypot(dx, dz) > (beat?.reach ?? config.reach)) return;
 
     // The blow goes where the body is *pointing*, not where the target happens
     // to be — after the warp those agree, and when they do not it is because
     // the player turned, in which case the pose is the truth.
     const yaw = this.character.facing;
-    this.onHit?.(target, Math.sin(yaw), Math.cos(yaw));
+    this.onHit?.(target, Math.sin(yaw), Math.cos(yaw), beat);
   }
 
   /** Abandon the swing — for resets, the character screen and teardown. */
@@ -387,7 +451,7 @@ export class Attack {
     this.locked = false;
     this.weight = 0;
     this.target = null;
-    this._struck = false;
+    this._hit = 0;
     this.warp.active = false;
     if (this.action) {
       this.action.stop();

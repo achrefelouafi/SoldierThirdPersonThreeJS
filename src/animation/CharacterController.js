@@ -79,6 +79,18 @@ const ANIMATION_URLS = {
   kick: './animations/fight animations/Kick.fbx',
   slashHit: './animations/fight animations/Slash.fbx',
   crouchSlash: './animations/fight animations/Crouchslash.fbx',
+  // The long one: three sweeps in a single 3.63-second export, the only clip on
+  // the rig that lands more than one blow. Which frames those are is
+  // `settings.swordCombo.hits`, and how they are dressed is `vfx/SwordCombo.js`.
+  swordCombo: './animations/fight animations/SwordCombo.fbx',
+  // A cast, thrown from where the body is standing. Two beats and no sword:
+  // the first sweeps the hands and strikes a rune into the ground under
+  // whoever is being unmade, the second drives an arm out and brings a column
+  // up through it — and the arm stays out for as long as the column holds. The
+  // one attack that never closes on its mark (`settings.voidBeam.maxWarp` is
+  // zero); see `settings.voidBeam` for which frames those beats are, and
+  // `vfx/RunicBeam.js` for what comes up.
+  voidBeam: './animations/fight animations/CastFront.fbx',
   // The one attack that is skeleton-only like the gaits above, and the one
   // whose vertical matters: the backflip's whole arc is in the hips track, and
   // `_retarget` keeps it for free.
@@ -184,6 +196,20 @@ export class CharacterController {
     this.crouchSlash = null;
     /** The flip kick — the same machine once more, and the one that leaves. */
     this.flipKick = null;
+    /**
+     * The three-hit combo — the same machine again, and the only one that
+     * strikes more than once. It is also the only one that hurts anybody from
+     * where it is standing: the first two of its sweeps throw a cut rather than
+     * landing one. See `settings.swordCombo`.
+     */
+    this.swordCombo = null;
+    /**
+     * The unmaking — the same machine once more, and the only one of them that
+     * is an *ability* rather than a technique. Neither of its two strikes
+     * touches anybody: the first opens a rune under the body and the second
+     * calls a column of void up through it. See `settings.voidBeam`.
+     */
+    this.voidBeam = null;
     /**
      * Every attack the body has, in the order a press is offered to them.
      *
@@ -314,9 +340,27 @@ export class CharacterController {
     this.flipKick = new Attack(this.mixer, this.clips.get('flipKick'), this, {
       configKey: 'flipKick'
     });
-    this.attacks = [this.attack, this.slashHit, this.crouchSlash, this.flipKick].filter(
-      (move) => move.available
-    );
+    // Three blows out of one clip, and an approach that does not begin until
+    // two of them have been thrown — both of those are `Attack` reading fields
+    // off the block rather than anything special here.
+    this.swordCombo = new Attack(this.mixer, this.clips.get('swordCombo'), this, {
+      configKey: 'swordCombo'
+    });
+    // And two blows out of another, neither of which is a blow: this one's
+    // beats open a rune and call something up it. That it is dressed entirely
+    // differently from every other attack is `vfx/RunicBeam.js`'s business —
+    // from here it is a clip with two frames marked in it, like the combo.
+    this.voidBeam = new Attack(this.mixer, this.clips.get('voidBeam'), this, {
+      configKey: 'voidBeam'
+    });
+    this.attacks = [
+      this.attack,
+      this.slashHit,
+      this.crouchSlash,
+      this.flipKick,
+      this.swordCombo,
+      this.voidBeam
+    ].filter((move) => move.available);
 
     // The hover. It masks the gait exactly as the jumps do, and for longer:
     // there is no walk cycle worth leaving under a body that is six metres up.
@@ -865,6 +909,8 @@ export class CharacterController {
     this.slashHit = null;
     this.crouchSlash = null;
     this.flipKick = null;
+    this.swordCombo = null;
+    this.voidBeam = null;
     this.mixer?.stopAllAction();
     this.mixer = null;
     this.locomotion = null;

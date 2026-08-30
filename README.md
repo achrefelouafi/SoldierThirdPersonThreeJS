@@ -21,9 +21,11 @@ npm run build
 | --- | --- |
 | `WASD` / arrows | Move. `Shift` runs. |
 | `Space` | Leap — a running long jump, or an in-place hop at any lesser pace. In the air it looses the blades. |
-| `E` · `R` · `T` | Kick · Slash Hit · Slide Cut. The three techniques. |
+| `E` · `R` · `T` · `Q` | Kick · Slash Hit · Slide Cut · Flip Kick. |
+| `Z` | Sword Combo — throws two cuts across the ground at a body up to eleven metres off, then closes and takes it apart. |
 | `V` | Shadows — mark two bodies, and a shadow of you goes for each. |
 | `C` | Judgement — mark one body, and a fist comes down through a seal over its head. |
+| `B` | Unmaking — strikes twice at the nearest body: a rune into the ground under it, then a column of void up through it. Nothing is left to fall. |
 | `X` | Flight — leave the ground, mark bodies to forge a blade for each, `Space` looses them. |
 | `1` | Swap the weapon. The katana burns away and the rifle burns in, or the other way round. |
 | `Tab` | The equipment studio. |

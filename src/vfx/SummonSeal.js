@@ -2,7 +2,19 @@ import { AdditiveBlending, Color, DoubleSide, Mesh, PlaneGeometry, ShaderMateria
 
 import { LAYER } from '../core/Layers.js';
 import { noiseGLSL } from '../shaders/lib/noise.glsl.js';
+import { terrainGLSL } from '../shaders/lib/terrain.glsl.js';
 import { copyColor } from '../utils/color.js';
+
+/**
+ * Subdivisions of a seal that has to lie on the ground.
+ *
+ * Only paid for when a height field is bound: a seal hanging in the air is one
+ * quad, because there is nothing for more vertices to describe. One that is
+ * lying on the floor is three metres across over terrain that can have a whole
+ * shoulder of a hill in it, and this is the count at which it stops cutting
+ * into slopes.
+ */
+const GROUND_SEGMENTS = 24;
 
 /**
  * A magic circle, lying flat in the air.
@@ -45,10 +57,19 @@ import { copyColor } from '../utils/color.js';
  * frame by `vfx/Judgement.js`. It never allocates after construction.
  */
 export class SummonSeal {
-  constructor() {
-    // Flat in XZ. One quad: the shape is entirely in the fragment shader, so
-    // there is nothing for more vertices to describe.
-    const geometry = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  /**
+   * @param {object} [options]
+   * @param {{uniforms: object}|null} [options.terrain] a height field to lie
+   *   on. Given one, the quad is subdivided and every vertex is dropped onto
+   *   the ground — which is what a seal drawn at somebody's *feet* needs and
+   *   what one hung in the air must not have. Omitted, the seal is one flat
+   *   quad at the height it is placed at, which is the fist's case.
+   */
+  constructor({ terrain = null } = {}) {
+    // Flat in XZ. One quad when it hangs in the air: the shape is entirely in
+    // the fragment shader, so there is nothing for more vertices to describe.
+    const segments = terrain ? GROUND_SEGMENTS : 1;
+    const geometry = new PlaneGeometry(1, 1, segments, segments).rotateX(-Math.PI / 2);
 
     this.material = new ShaderMaterial({
       transparent: true,
@@ -86,11 +107,17 @@ export class SummonSeal {
         uPulse: { value: 0.18 },
         uPulseSpeed: { value: 5 },
         /** Reshuffles every glyph on the circle. One number, one new seal. */
-        uSeed: { value: 17.3 }
+        uSeed: { value: 17.3 },
+        /** Metres off the floor, for the grounded case. Ignored without terrain. */
+        uLift: { value: 0.04 }
       },
-      vertexShader: VERTEX,
+      vertexShader: VERTEX(terrain),
       fragmentShader: FRAGMENT
     });
+    if (terrain) {
+      Object.assign(this.material.uniforms, terrain.uniforms);
+      this.material.defines.TERRAIN = '';
+    }
 
     this.mesh = new Mesh(geometry, this.material);
     this.mesh.name = 'SummonSeal';
@@ -159,6 +186,8 @@ export class SummonSeal {
     u.uDetail.value = config.detail;
     u.uPulse.value = config.pulse;
     u.uPulseSpeed.value = config.pulseSpeed;
+    // Only the grounded seal has one, and the fist's block does not state it.
+    if (config.lift !== undefined) u.uLift.value = config.lift;
   }
 
   /** A fresh set of glyphs, for the next cast. */
@@ -180,12 +209,30 @@ export class SummonSeal {
 
 /* -------------------------------------------------------------------- */
 
-const VERTEX = /* glsl */ `
+/**
+ * The quad, and — where a height field is bound — the ground under it.
+ *
+ * The two paths are deliberately not one. A seal hanging in the air is placed
+ * exactly where it was put, because the fist coming through it is clipped at
+ * that plane and a vertex nudged by terrain would break the hole. A seal at
+ * somebody's feet has the opposite requirement: it must lie *on* the floor, or
+ * it is buried on the uphill side of the first slope the player stands on.
+ */
+const VERTEX = (terrain) => /* glsl */ `
+uniform float uLift;
 varying vec2 vUv;
+${terrain ? terrainGLSL : ''}
 
 void main() {
   vUv = uv;
+
+#ifdef TERRAIN
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  world.y = terrainHeightAt(world.xz) + uLift;
+  gl_Position = projectionMatrix * viewMatrix * world;
+#else
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+#endif
 }
 `;
 

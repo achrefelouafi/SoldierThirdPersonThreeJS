@@ -73,6 +73,22 @@ export class ThirdPersonController {
      * @type {number|null}
      */
     this.aimYaw = null;
+
+    /**
+     * A multiplier on the pace the stick asks for.
+     *
+     * One is the walk and the run exactly as `config/locomotion` states them,
+     * and nothing but a boon ever moves it — `vfx/Ascendance.js`'s ten seconds,
+     * applied here by `App#_syncBoon`. It is on the *target* speed rather than
+     * on the position, so the body still has to accelerate into it and still
+     * decelerates out of it: a haste that teleported the velocity would read as
+     * a hitch in the controller rather than as the character getting quicker.
+     *
+     * `Locomotion` is not told about it and does not need to be — it resolves
+     * the legs from the speed the body is actually doing, so a hasted run finds
+     * the stride rate on its own (see `strideMax`).
+     */
+    this.speedScale = 1;
   }
 
   /** @param {import('../combat/EnemyManager.js').EnemyManager} enemies */
@@ -177,7 +193,8 @@ export class ThirdPersonController {
     // forward = -(sin, cos), right = (cos, -sin) — see the camera basis above.
     _desired.set(axis.y * -sin + axis.x * cos, axis.y * -cos + axis.x * -sin);
 
-    const wanted = config.enabled ? (running ? config.runSpeed : config.walkSpeed) : 0;
+    const wanted =
+      (config.enabled ? (running ? config.runSpeed : config.walkSpeed) : 0) * this.speedScale;
     _desired.multiplyScalar(wanted);
 
     // Stopping is sharper than starting: the deceleration ramp is what stops the

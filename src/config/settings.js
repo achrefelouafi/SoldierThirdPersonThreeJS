@@ -1,4 +1,4 @@
-/**
+﻿/**
  * settings.js — the single source of truth for every tweakable value on the stage.
  *
  * Nothing in the renderer owns state that lives here: the lights, the floor
@@ -973,6 +973,889 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
+  /* The sword combo                                                     */
+  /* ------------------------------------------------------------------ */
+  /**
+   * `Z` — three cuts, two of which are thrown.
+   *
+   * The same machine as every move above (`animation/Attack.js`), and the first
+   * one to use two things that machine grew for it: `hits`, which states more
+   * than one contact in a single clip, and `warpFrom`, which says the approach
+   * begins somewhere other than the first frame. Read the kick's block first —
+   * every field the two share means exactly what it means there.
+   *
+   * ## The shape of the move
+   *
+   * It is a **reach, reach, close**. The body locks a target up to eleven metres
+   * off and stays where it is for the first two sweeps: each one throws a
+   * crescent of light that crosses the ground on its own and opens on the chest
+   * (`vfx/SlashWave.js`). Only then does the warp run — a hard dash onto the
+   * mark between the second cut and the third — and the finisher lands in
+   * person, with an edge on it.
+   *
+   * The first two beats deliberately do not kill (`wound` below): a combo whose
+   * opening beat can finish the job has no third beat. They spend health and
+   * stagger; the third takes the body apart (`slices`).
+   *
+   * ## The clip
+   *
+   * `SwordCombo.fbx` runs 3.63 seconds at its authored pace — by a distance the
+   * longest thing on this rig — and the three `hits` below are read straight off
+   * the sword hand's speed through it, sampled against the hips:
+   *
+   *  - **0 → 0.24** the wind-up, the blade carried back and low and then up over
+   *    the shoulder. Nothing has happened yet.
+   *  - **0.30** the first sweep: an overhead chop coming down a steep diagonal
+   *    across the body's front, the hand furthest forward at 0.30 and fastest
+   *    at 0.32.
+   *  - **0.485** the second: a flat sweep across the front at chest height,
+   *    right to left, and the fastest frame in the whole clip.
+   *  - **0.715** the third: a high diagonal falling the other way from the
+   *    first, so the pair cross. This is the one that cuts.
+   *  - **0.75 → 1** the follow-through and the settle. Control comes back as the
+   *    body straightens (`recoverAt`), not after it has stopped moving.
+   *
+   * At `timeScale` 1.6 the whole thing is 2.27 seconds and the commitment a
+   * little under two — long, and meant to be. It is the most expensive thing the
+   * body can choose to do, and the two seconds it costs are the price of a kill
+   * from eleven metres away.
+   */
+  swordCombo: {
+    enabled: true,
+    /**
+     * Metres a target can be locked from.
+     *
+     * The longest of any move, because the first two beats do not need the body
+     * to be anywhere near what it is hitting — they are thrown. What the range
+     * actually has to cover is the *dash*, which is why it and `maxWarp` are
+     * nearly the same number.
+     */
+    range: 11.0,
+    /** Full width of the search cone, degrees. Narrow: this is a committed line. */
+    cone: 84,
+    /** Metres from the target's centre the finisher is thrown from. */
+    standoff: 1.7,
+    /** Ceiling on the dash, metres. Everything `range` can lock, it can reach. */
+    maxWarp: 10.0,
+    /**
+     * Where the approach begins and ends, in clip-normalised time.
+     *
+     * The gap between them is the dash, and it is deliberately short: the body
+     * stands and throws for two thirds of the clip, then covers up to ten metres
+     * in the fifth of it left before the finisher lands. Push `warpFrom` toward
+     * `warpAt` and the dash becomes a blink; drop it to zero and the move
+     * becomes an ordinary walk-in that happens to throw two cuts on the way.
+     */
+    warpFrom: 0.52,
+    warpAt: 0.7,
+    /**
+     * Fraction of *that* window the turn finishes in — but measured against the
+     * clip, not the dash (see `Attack#_advanceWarp`). At these the body is
+     * square onto its target by phase 0.18, which is well before the first
+     * crescent leaves: you face what you are about to throw at.
+     */
+    turnAt: 0.26,
+    /**
+     * Unused by this move, and here because every attack has one: `hits` below
+     * is what actually names its contacts. Left at the finisher's time so
+     * anything that reads `hitAt` generically gets a sensible answer.
+     */
+    hitAt: 0.715,
+    /** Metres the *finisher* still lands at. The thrown beats state their own. */
+    reach: 2.9,
+    /** Normalised time the stick is handed back, as the body straightens. */
+    recoverAt: 0.86,
+    /** 3.63 seconds is far too long to hold a player still. At 1.6 it is 2.27. */
+    timeScale: 1.6,
+    /** Seconds to fade the move over the gait, and back off it. */
+    blendIn: 0.1,
+    blendOut: 0.3,
+
+    /**
+     * The three blows, in clip-normalised time.
+     *
+     * `at` is the only field `animation/Attack.js` reads; everything else on an
+     * entry is carried straight through to `vfx/SwordCombo.js`, which is what
+     * turns a beat into something on screen.
+     *
+     *  - `kind` — `'wave'` throws a crescent at the target, `'finish'` lands in
+     *    person. It is the one field `core/App.js` branches on.
+     *  - `reach` — how far this particular blow still connects at. The thrown
+     *    beats state a reach as long as the lock range, because the body is
+     *    still standing where it pressed the key; the finisher does not state
+     *    one and falls back to the block's own `reach`, which is a sword's.
+     *  - `roll` — degrees the crescent is turned about its line of flight. 90
+     *    stands the arc up (a chop), **0 lays it flat**, which is a sweep going
+     *    straight across the body it was thrown at. All three are 0: a cut that
+     *    arrives tilted reads as having been aimed at nothing in particular,
+     *    where a flat one visibly takes the target across the middle. Tilt one
+     *    only if you want a chop, and tilt it deliberately.
+     *  - `size` — the arc's radius in metres. The finisher's is the largest by
+     *    half again: it is not travelling anywhere, so it can afford to be.
+     *  - `speed` — metres a second, for the thrown ones. At 38 a cut crosses ten
+     *    metres in a quarter of a second, which is long enough to be watched and
+     *    short enough that the body is not left standing.
+     *  - `spin` — degrees a second the crescent rolls as it flies. 0 on all
+     *    three, and it has to be: a cut launched flat that rolls on the way
+     *    over arrives at whatever angle the flight time happened to leave it
+     *    at, which is the one thing that makes a thrown blade look aimless.
+     */
+    hits: [
+      { at: 0.3, kind: 'wave', beat: 0, reach: 12, roll: 0, size: 1.5, speed: 38, spin: 0 },
+      { at: 0.485, kind: 'wave', beat: 1, reach: 12, roll: 0, size: 1.75, speed: 44, spin: 0 },
+      { at: 0.715, kind: 'finish', beat: 2, roll: 0, size: 1.9, strength: 1, spin: 0 }
+    ],
+
+    /**
+     * What each *thrown* cut costs the body it lands on, in the units
+     * `settings.gunplay.damage` is written in.
+     *
+     * Under a third of a body's health each, on purpose. Two of them leave it
+     * standing and staggered with about a third left, which is the state the
+     * finisher is supposed to arrive into. Raise it past a half and the combo
+     * kills on its second beat and the third lands on a corpse.
+     */
+    wound: 30,
+    /** Metres the lens is knocked by each thrown cut landing. */
+    woundShake: 0.11,
+
+    /**
+     * m/s along the blow, and straight up, given to the body the finisher lands
+     * on. The heaviest of any move: this is two seconds of commitment arriving
+     * at once, and the corpse should leave the frame knowing it.
+     */
+    impulse: 5.4,
+    lift: 6.0,
+    /** Upper body multiplier — high, so what is left of the torso goes over. */
+    spin: 2.2,
+    /** Seconds the world nearly stops on the finisher, and how far down it goes. */
+    hitStop: 0.14,
+    hitStopScale: 0.04,
+    /** Metres the lens is knocked. The heaviest thing a technique does. */
+    shake: 0.36,
+    /** The third beat comes across with the sword — see `settings.slice`. */
+    slices: true,
+
+    /**
+     * The crescents — `vfx/SlashWave.js`.
+     *
+     * One swept sheet per cut, whose `v` runs from the tail to the leading edge,
+     * so the arc and the veil dragging off it are the same surface. The three
+     * numbers that decide whether it reads as a *cut* rather than as a glowing
+     * ribbon are `razor` (where the hard white line sits along the edge — push
+     * it to 0.99 for a scalpel, drop it to 0.8 for a smear), `converge` (how far
+     * the inner edge bows in, which is what makes the silhouette a crescent) and
+     * `tipTaper` (how pointed the ends are).
+     */
+    wave: {
+      enabled: true,
+      /** Metres above the target's feet a thrown cut is aimed. Chest height. */
+      aimHeight: 1.05,
+      /** Defaults for a beat that does not state its own. */
+      size: 1.6,
+      speed: 40,
+      /** Seconds a cut may stay in the air before it expires, having missed. */
+      life: 1.2,
+      /** Seconds a cut hangs on the body after it lands. */
+      hold: 0.22,
+      /** Seconds the finisher's own parked arc hangs on the contact point. */
+      finishLife: 0.55,
+      /**
+       * How hard a cut is allowed to steer toward a target that has moved, per
+       * second. Low on purpose: this is a thrown blade, not a missile, and one
+       * that tracks perfectly reads as one.
+       */
+      homing: 3.2,
+
+      /** The hard line on the leading edge, the glow behind it, and the veil. */
+      coreColor: '#ffffff',
+      edgeColor: '#a8e9ff',
+      bodyColor: '#2f7dff',
+      tailColor: '#7c4dff',
+      intensity: 2.0,
+      /** Radians the arc subtends, tip to tip. */
+      spread: 2.25,
+      /** How far the inner edge bows in — the crescent's whole silhouette. */
+      converge: 0.58,
+      /** How far the arc is bowed back, so it is not a flat card edge-on. */
+      bow: 0.24,
+      /** How far the veil is dragged back behind the edge, × the radius. */
+      tail: 0.62,
+      /** Exponent on the tips: low is a wide blade, high is a needle. */
+      tipTaper: 0.55,
+      /** Where along the sheet the white edge line sits, 0..1. */
+      razor: 0.94,
+      /** How hard the noise eats the veil. At 0 the trail is a solid sheet. */
+      erode: 1.15,
+      /** How much wider the arc opens over its flight — a cut spreads. */
+      grow: 0.35
+    },
+
+    /**
+     * The finisher's own shape — `vfx/RiftBurst.js`.
+     *
+     * Violet against the cuts' blue, and a sphere against their arcs, because
+     * the third beat has to be legible as a different event from across the
+     * field. It is **five layers**, and they are listed here in the order they
+     * are drawn — back to front, which is also the order to switch them off in
+     * when tuning. Each has its own `*Enabled` flag so it can be soloed against
+     * the rest, and `vfx/RiftBurst.js` is where each one is explained:
+     *
+     *  1. `halo*`  — the air around it, lit. The only source of glow on this
+     *     stage, which runs its bloom pass at hundredths.
+     *  2. the shell — `radius`, `life`, `fresnel`, `churn*`. A sphere drawn on
+     *     its rim.
+     *  3. `mote*`  — the grain inside it, thrown outward. What gives the sphere
+     *     an inside, and what lets the shell stay a thin rim.
+     *  4. `ring*`  — the shockwave, on three planes, outrunning the shell.
+     *  5. `shard*` — needles of light, out and gone before the shell has
+     *     finished opening. The layer that makes it read as *breaking*.
+     *
+     * If only one number here is ever touched, make it `shardLength`: nothing
+     * else changes the silhouette of the finisher as much.
+     */
+    rift: {
+      enabled: true,
+
+      /* ---- 1. the halo ---- */
+      haloEnabled: true,
+      /**
+       * Metres the glow in the air reaches, and the seconds it hangs.
+       *
+       * Nearly three times the shell, and deliberately: this layer has no edge
+       * of its own (it is two gaussians), so its radius is not a size on screen
+       * but how far the falloff has to travel before it is gone. Anything
+       * tighter reads as a second sphere behind the first.
+       */
+      haloRadius: 4.6,
+      haloLife: 0.67,
+      /** Blue where the burst is, violet out in the air around it. */
+      haloColor: '#3f5bff',
+      haloEdgeColor: '#a05cff',
+      /** Low. It is under four brighter layers and it is not meant to be seen. */
+      haloIntensity: 1.1,
+
+      /* ---- 2. the shell ---- */
+      /** Metres the shell opens to, and the seconds it takes. */
+      radius: 2.2,
+      life: 0.6,
+      /** The rim, the little of the body behind it, and the flash inside. */
+      coreColor: '#ffffff',
+      rimColor: '#89b9ff',
+      deepColor: '#3a2ce0',
+      intensity: 1.45,
+      /**
+       * Exponent on the fresnel. High is a thin rim; low fills the sphere.
+       *
+       * Higher than it used to be, because the motes now do the filling: a
+       * shell that is only a rim over a field of grain is a volume, and one
+       * that is also filled in is a ball with grain painted on it.
+       */
+      fresnel: 3.6,
+      /** How far the surface is displaced by noise, and how fast it crawls. */
+      churn: 0,
+      churnSpeed: 3.4,
+
+      /* ---- 3. the core ---- */
+      moteEnabled: true,
+      /**
+       * How many, how far they get and how long they last.
+       *
+       * The count is the one number here with a real cost, and it is a cheap
+       * one: a mote is twelve floats written once and a closed form evaluated
+       * per vertex, so the whole field is a memcpy a frame. Two hundred and
+       * forty is dense enough to read as a volume at four metres and thin
+       * enough to still read as *grain* rather than as fog.
+       */
+      moteCount: 221,
+      moteReach: 2.65,
+      moteLife: 0.6,
+      /** Metres across one mote is, before its own random spread. */
+      moteSize: 0.056,
+      /**
+       * How far a mote is smeared along its own screen velocity.
+       *
+       * The difference between a spray and a dot screen. At zero the field
+       * strobes, because a mote crosses several pixels between two frames.
+       */
+      moteStretch: 0.032,
+      /**
+       * The fraction thrown clean through the shell, and how much further they
+       * go. These are the ones that say the sphere failed to hold what was in
+       * it — past about a quarter they stop being escapees and become the
+       * field, and the shell loses its edge.
+       */
+      escape: 0.18,
+      escapeReach: 2.25,
+      moteColor: '#bcd8ff',
+      moteIntensity: 1.55,
+
+      /* ---- 4. the rings ---- */
+      /** Metres the rings reach, and the seconds they take to get there. */
+      ringRadius: 3.4,
+      ringLife: 0.6,
+      ringColor: '#c58cff',
+      ringIntensity: 3.5,
+      /** Thickness of a ring's band, as a fraction of its radius, and its feather. */
+      ringWidth: 0.01,
+      ringSoftness: 0.05,
+      /** Radians a second a ring turns in its own plane. */
+      ringSpin: 3.05,
+      /** The radial comb through them, and how deep it cuts. */
+      spokes: 25,
+      spokeDepth: 0.25,
+
+      /* ---- 5. the shards ---- */
+      shardEnabled: true,
+      /**
+       * How many needles, how long the longest of them reach and how wide they
+       * are at the root. Each shard takes its own length from a wide spread
+       * around `shardLength` — a dozen needles all one length is a sun symbol,
+       * and a dozen over six lengths is an explosion.
+       */
+      shardCount: 18,
+      shardLength: 4.4,
+      shardWidth: 0.05,
+      /**
+       * Seconds. Half the shell's, on purpose: the shards are the *event* and
+       * the shell is what is left of it, and a needle still on screen when the
+       * sphere has finished opening reads as decoration.
+       */
+      shardLife: 0.32,
+      /** How far out along itself a shard starts, as a fraction of its length. */
+      shardRoot: 0.06,
+      /**
+       * How far the needles are allowed out of the plane across the blow, 0..1
+       * of a right angle. At 0 the burst is a flat starburst standing square to
+       * the cut — dramatic, and wrong from every other camera. At 1 it is an
+       * even hedgehog and the bearing of the blow is gone.
+       */
+      shardBias: 0.5,
+      shardColor: '#a8ddff',
+      shardIntensity: 3.6
+    },
+
+    /**
+     * The flash and the shower — `vfx/BladeImpact.js`, reused unchanged.
+     *
+     * Every field means what it means on `settings.flight.blades.impact`; this
+     * is a second set of numbers for the same system, tuned bluer and a little
+     * larger. The three multipliers above it are what separate the three
+     * moments: a small flash off the steel as a cut leaves, a full one where it
+     * lands, and half as much again on the finisher.
+     */
+    launchFlash: 0.95,
+    arriveFlash: 1.0,
+    finishFlash: 1.15,
+    impact: {
+      enabled: true,
+      /**
+        * Seconds the flash lives, and metres across it opens.
+        *
+        * Small, and it has to be: on the finisher this sits inside the shell,
+        * the rings and a parked crescent, all of them additive and all of them
+        * centred on the same point. Anything larger stops being the hot core of
+        * a hit and becomes a white disc with the rest of the move behind it.
+        */
+      life: 0.3,
+      size: 0.8,
+      color: '#dff2ff',
+      ringColor: '#5fb4ff',
+      sparkColor: '#bfe4ff',
+      intensity: 2.3,
+      /** Spikes in the star, and how far they reach — the bearing of the steel. */
+      spikes: 7,
+      spikeLength: 1.8,
+      /**
+       * Sparks thrown, how fast they leave and how wide the cone opens.
+       *
+       * Close to the blades' own numbers on purpose — a shower three times as
+       * dense does not read as three times the hit, it reads as a firework. The
+       * three `*Flash` multipliers are what make one of these bigger than
+       * another, not the count.
+       *
+       * Off for now: on this move the shower was reading as noise over the
+       * crescents and the burst, both of which already carry the hit. The rest
+       * of the block is left tuned so putting the count back is one number.
+       */
+      sparks: 0,
+      sparkSpeed: 8.2,
+      sparkSpread: 0.52,
+      sparkLife: 0.52,
+      sparkSize: 0.038,
+      /** How far a spark is smeared along its own screen velocity. */
+      sparkStretch: 0.043,
+      /** Air, and weight. */
+      sparkDrag: 1.95,
+      sparkGravity: -19
+    },
+
+    /**
+     * The ground's answer under the finisher — `vfx/ShockRing.js`.
+     *
+     * The same system as the judgement's, and every field means what it means
+     * there. Smaller and faster: a sword is not a fist the size of a house.
+     */
+    shock: {
+      enabled: true,
+      radius: 2.2,
+      life: 0.62,
+      color: '#a97cff',
+      crackColor: '#6fd6ff',
+      intensity: 0.75,
+      width: 0.09,
+      softness: 0.165,
+      cracks: 22,
+      crackLength: 1.31,
+      crackWidth: 0.008,
+      crackGlow: 2.9,
+      lift: 0.017
+    },
+
+    /**
+     * One light for the whole move — `vfx/SwordCombo.js`.
+     *
+     * It rides whichever crescent is in the air and jumps to each landing, and a
+     * dimmer event never drags it off a brighter one. Never casts a shadow: a
+     * shadow map re-rendered for a light that lives half a second costs more
+     * than every mesh in the move put together.
+     */
+    light: {
+      /** Peak, in three.js point-light units, and the metres it carries. */
+      intensity: 60,
+      range: 17.5,
+      color: '#7cc4ff',
+      /** Seconds a flash takes to decay. Squared on the way down. */
+      decay: 0.34,
+      /** Fractions of `intensity` for each of the three moments. */
+      launch: 0.35,
+      arrive: 0.8,
+      finish: 1.0
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* The void runic beam                                                 */
+  /* ------------------------------------------------------------------ */
+  /**
+   * The unmaking (`B`) — `animation/Attack.js` and `vfx/RunicBeam.js`.
+   *
+   * ## The move
+   *
+   * Mechanically it is the sword combo again: one press, one body locked, one
+   * clip, and beats stated in `hits` that whoever wired `onHit` turns into
+   * events. What is different is what those beats *are*. `CastFront.fbx`
+   * throws two, and neither of them reaches anybody:
+   *
+   *  - the first sweeps the hands and strikes a rune into the ground under the
+   *    mark and nothing else. It cannot hurt anyone and it is not meant to —
+   *    it is the beat where both parties know what is coming and neither can
+   *    stop it;
+   *  - the second drives an arm out and brings a column of void up through the
+   *    body standing on it.
+   *
+   * And it is the one attack that does not travel. Every other move here warps
+   * onto a mark in front of what it is throwing at, because a fist or a blade
+   * has to *be* somewhere to land; nothing in this one is thrown from the hand,
+   * so the body stays exactly where the player pressed the key and only turns
+   * to face the mark. That is `maxWarp: 0` below, and it is the whole
+   * difference — the numbers the approach used are left stated but inert.
+   *
+   * That is the whole reason it is filed as an *ability* rather than a
+   * technique (`config/abilities.js`): the other four attacks are things a body
+   * does with its feet and a sword, and this is a body asking for something.
+   *
+   * ## What it costs the thing it lands on
+   *
+   * Nothing survives it — there is no `wound` here and no health arithmetic,
+   * because the beam does not damage a body, it *unmakes* one. `unmake` below
+   * is the fact about the blow that says so, exactly as `slices` is the fact
+   * that says the slash comes across with an edge: a body taken by this skips
+   * the five seconds of lying there that every other corpse gets and burns
+   * away where it stood, in the beam's own colour rather than in embers.
+   *
+   * ## The look
+   *
+   * Five layers, one draw call each, in the order they are drawn — and every
+   * one has an `enabled` of its own so it can be soloed against the other four.
+   * `vfx/RunicBeam.js` is where each is explained:
+   *
+   *  1. `seal`   — the runes on the ground. `vfx/SummonSeal.js`, the same
+   *     circle the judgement opens, laid flat instead of hung.
+   *  2. `beam`   — the column itself, drawn on its axis rather than its rim.
+   *  3. `spiral` — the cords wound round it, gold against its violet.
+   *  4. `impact` — the burst at its foot. `vfx/BladeImpact.js`, reused.
+   *  5. `grain`  — the void shards orbiting and rising through it.
+   *
+   * If only one number here is ever touched, make it `beam.corePower`: it is
+   * how tightly the light gathers down the middle of the tube, and it is the
+   * whole difference between a column and a pipe.
+   */
+  voidBeam: {
+    enabled: true,
+    /**
+     * Metres a body can be locked from.
+     *
+     * The longest of any move, and the same distance the beats state as their
+     * `reach`: nothing here has to cross the ground, so the only honest range
+     * is how far the rune can be written — not how far a body could walk in
+     * the length of a clip.
+     */
+    range: 12,
+    /** Full width of the search cone, degrees. */
+    cone: 92,
+    /** Inert while `maxWarp` is zero: there is no mark to stand off from. */
+    standoff: 2.1,
+    /**
+     * Ceiling on the approach, metres — and here it is *none*.
+     *
+     * Zero is the field doing its job rather than the field switched off:
+     * `Attack#_resolveWarp` clamps the step to it, so the destination resolves
+     * onto the spot the body already occupies and the warp still runs, still
+     * turning to face the mark. The cast is thrown from where you stood.
+     */
+    maxWarp: 0,
+    /**
+     * Where the turn is measured against, in clip-normalised time.
+     *
+     * With no step left in the warp these two only frame the turn — see
+     * `turnAt`. Kept stated so raising `maxWarp` in the editor gives the move
+     * an approach again without needing anything else set.
+     */
+    warpFrom: 0,
+    warpAt: 0.24,
+    /**
+     * Fraction of that window the turn finishes in — square on by phase 0.12,
+     * which is well before the hands sweep the rune down at 0.21.
+     */
+    turnAt: 0.5,
+    /** Unused: `hits` names the contacts. Left at the frame the beam opens. */
+    hitAt: 0.48,
+    /** Metres the *fallback* blow lands at. Both beats state their own. */
+    reach: 3.2,
+    /**
+     * Normalised time the stick is handed back.
+     *
+     * The clip holds the arm out from 0.48 to about 0.70 and then stands the
+     * body up out of the cast; this is a little past that, so the pose is held
+     * for the whole of the column's own hold and the player gets the body back
+     * as it straightens rather than while it is still pointing.
+     */
+    recoverAt: 0.78,
+    /**
+     * 4.27 seconds of clip — half again the length of anything else on the rig.
+     *
+     * At 1.75 it is 2.44, the two beats are 0.66 apart and the body is the
+     * player's again after 1.9. Slower than that and the hold outstays the
+     * `charge` timeout below; much faster and the cast reads as a jab.
+     */
+    timeScale: 1.75,
+    /** Seconds to fade the move over the gait, and back off it. */
+    blendIn: 0.12,
+    blendOut: 0.32,
+
+    /**
+     * The two beats, in clip-normalised time — measured off the clip's own
+     * hands, at the frame the sweep closes and the frame the cast lands.
+     *
+     *  - `kind` — `'rune'` opens the circle and does nothing else, `'unmake'`
+     *    brings the column up and takes the body. It is the one field
+     *    `core/App.js` branches on.
+     *  - `reach` — how far this blow still connects at. Both are stated well
+     *    past the lock range, because neither of them is a *reach* in any
+     *    physical sense: the rune is written on the ground the body is standing
+     *    on however far away that is, and the column comes up out of it.
+     */
+    hits: [
+      { at: 0.21, kind: 'rune', beat: 0, reach: 12 },
+      { at: 0.48, kind: 'unmake', beat: 1, reach: 12 }
+    ],
+
+    /**
+     * m/s along the blow, and straight up, given to the body it takes.
+     *
+     * Almost nothing along, and a real lift: there is no direction in this. The
+     * body is pulled off its feet into the column rather than thrown out of it,
+     * and it burns away on the way up.
+     */
+    impulse: 0.4,
+    lift: 2.6,
+    /** Upper body multiplier — enough to fold it over as it goes. */
+    spin: 1.5,
+    /** Seconds the world nearly stops as the column opens, and how far down. */
+    hitStop: 0.12,
+    hitStopScale: 0.05,
+    /** Metres the lens is knocked. */
+    shake: 0.34,
+    /** Nothing is cut here. The body is not parted, it is unmade. */
+    slices: false,
+
+    /**
+     * How a body taken by this goes away — read by `combat/Enemy.js#die`.
+     *
+     * A fact about the *blow*, in the same way `slices` is: what killed it
+     * decides how it leaves. Every other corpse on the stage lies there for
+     * `settings.enemies.corpseTime` and then burns off in ember orange; one
+     * taken by the beam gets almost none of that lying about and burns in the
+     * beam's own violet, from the feet up, with a wide soft edge — because what
+     * is eating it is not fire.
+     *
+     * Setting it to null would put this move's kills back on the ordinary path,
+     * which is the useful thing to try if the burn is ever in question.
+     */
+    unmake: {
+      /** Seconds the body lies there first. Almost none: it is already going. */
+      corpseTime: 0.1,
+      /** And the seconds it takes to go. Inside the column's own hold. */
+      dissolveTime: 1.15,
+      /** The burn line, its heat and how wide a band it is. */
+      edgeColor: '#c9a0ff',
+      edgeEmissive: 9.0,
+      edgeWidth: 0.24,
+      /**
+       * How much of the burn is height rather than noise.
+       *
+       * Lower than the default: a clean line rising up a body is a body being
+       * dipped in something, and this one is being eaten from everywhere at
+       * once by something that happens to start at the floor.
+       */
+      dissolveRise: 0.12
+    },
+
+    /**
+     * The choreography, in seconds — `vfx/RunicBeam.js`.
+     *
+     * `charge` is the only one that is not a pace: it is a *timeout*. The clip's
+     * second beat normally fires the column somewhere in the middle of it, and
+     * reaching the end means the cast lost whatever it was for — the body died
+     * to something else in between — so the rune folds away rather than firing
+     * at grass. Keep it comfortably longer than the gap between the two beats
+     * (0.66 s at the pace above) or the circle will close before the cast
+     * lands.
+     */
+    beats: {
+      /** The circle writing itself, one full turn. */
+      open: 0.3,
+      /** Held open, gathering — and the fizzle timeout. See above. */
+      charge: 1.1,
+      /** The column coming up. Under a quarter second reads as an eruption. */
+      strike: 0.22,
+      /** Standing, while what is inside it burns away. */
+      hold: 1.05,
+      /** And pinched out. */
+      close: 0.42,
+      /** Seconds the ripple takes to leave the rune after something came up it. */
+      ripple: 0.34
+    },
+
+    /** Metres above the ground the burst at the foot of the column is thrown. */
+    impactHeight: 0.55,
+    /** Master on that burst's size and counts. */
+    strikeFlash: 1.3,
+
+    /**
+     * 1 · The runes — `vfx/SummonSeal.js`, laid flat on the ground.
+     *
+     * Every field but `lift` means exactly what it means on
+     * `settings.judgement.seal`; it is the same circle drawn by the same
+     * shader, and that is deliberate. The two abilities reach into the same
+     * place, and a differently-drawn seal would say they do not.
+     */
+    seal: {
+      /** Metres it stands off the floor, so it is not in the ground's z-fight. */
+      lift: 0.05,
+      /** Metres from the centre to the outer ring. Wider than a body. */
+      radius: 1.75,
+      /** The lines, and the hot centre the column comes up through. */
+      color: '#8a4dff',
+      coreColor: '#f0e2ff',
+      intensity: 1.85,
+      /** Turns a second of the outer band. The inner bands run against it. */
+      spin: 0.09,
+      /** Marks in the tick band, glyphs in the rune band, and long spokes. */
+      ticks: 60,
+      runes: 18,
+      spokes: 8,
+      /** Stroke weight and its feather, both in fractions of the radius. */
+      width: 0.011,
+      softness: 0.009,
+      /** The soft light pooled inside the circle, and how mottled it is. */
+      haze: 0.42,
+      detail: 0.55,
+      /** Depth and speed of the breath the whole thing sits on. */
+      pulse: 0.22,
+      pulseSpeed: 4.4
+    },
+
+    /**
+     * 2 · The column.
+     *
+     * An open cylinder drawn on its *middle* rather than its rim. `corePower`
+     * is the control: it is the exponent on how square a piece of the wall is
+     * to the lens, so a high number gathers all the light down the axis (a
+     * beam) and a low one spreads it over the whole tube (a pipe).
+     */
+    beam: {
+      enabled: true,
+      /** Metres tall, and metres across at the waist. */
+      height: 7.2,
+      radius: 0.3,
+      /** How much wider the foot is than the waist — the skirt in the rune. */
+      flare: 0.85,
+      /** How much fatter it is on the frame it opens, easing back to its width. */
+      swell: 0.35,
+      /** Depth and speed of the breath it stands on while it holds. */
+      breathe: 0.035,
+      breatheSpeed: 8.5,
+      /** The axis, the light either side of it, and the violet at the edges. */
+      coreColor: '#ffffff',
+      innerColor: '#c3bcff',
+      edgeColor: '#8a3dff',
+      intensity: 1.35,
+      /** How tightly the light gathers on the axis, and how far the glow spreads. */
+      corePower: 4.4,
+      glowPower: 0.7,
+      /** Features up the column, and around it. */
+      grain: 3.2,
+      swirl: 1.8,
+      /** How fast the surface falls *down* through it, against the travel. */
+      flow: 1.7,
+      /** How hard that noise eats the light. At 0 the wall is a flat gradient. */
+      erode: 0.5,
+      /** Width of the hot band at the head, in fractions of the height. */
+      headWidth: 0.06,
+      /** How far up the rune's own light spills into the foot. */
+      footGlow: 0.1,
+      /** Where the top starts dissipating, 0..1 of the height. */
+      crown: 0.6
+    },
+
+    /**
+     * 3 · The cords wound round it.
+     *
+     * Each is a helix evaluated in the vertex shader and widened *across the
+     * screen*, so it can never turn edge-on to the lens and blink. They
+     * alternate handedness and colour around the column: two turning the same
+     * way read as one thick cord, and two turning against each other read as
+     * something being wound.
+     */
+    spiral: {
+      enabled: true,
+      /** How many. Even numbers pair the two colours; the ceiling is 6. */
+      count: 4,
+      /** Metres out from the axis at the foot, and how far up they run. */
+      radius: 0.52,
+      reach: 0.94,
+      /** Turns each makes over that length. */
+      turns: 2.3,
+      /** Metres across one cord at the foot, and what is left of that at the top. */
+      width: 0.055,
+      taper: 0.4,
+      /** Radians a second the whole winding turns. */
+      spin: 1.9,
+      /** How far they open out as they climb. */
+      flare: 0.45,
+      /** The white middle, and the two colours the cords alternate between. */
+      coreColor: '#fff3d4',
+      colorA: '#ffc257',
+      colorB: '#c06bff',
+      intensity: 2.4,
+      /** How hard a cord falls off from its middle. High is a wire, low is a smear. */
+      sharpness: 2.4,
+      /** Waves of brightness running up each cord. */
+      pulse: 15
+    },
+
+    /**
+     * 4 · The burst at its foot — `vfx/BladeImpact.js`, reused unchanged.
+     *
+     * Every field means what it means on `settings.swordCombo.impact`; this is
+     * a second set of numbers for the same system, violet rather than blue and
+     * thrown straight up. The sparks are on here, unlike the combo's: there is
+     * no crescent over the top of them to compete with.
+     */
+    impact: {
+      enabled: true,
+      life: 0.38,
+      size: 1.15,
+      color: '#efe1ff',
+      ringColor: '#9d5cff',
+      sparkColor: '#cfa8ff',
+      intensity: 2.4,
+      /** Spikes in the star, and how far they reach. */
+      spikes: 8,
+      spikeLength: 2.1,
+      /** Thrown up and out, and heavy enough to come back down inside the beam. */
+      sparks: 34,
+      sparkSpeed: 7.4,
+      sparkSpread: 0.72,
+      sparkLife: 0.75,
+      sparkSize: 0.042,
+      sparkStretch: 0.05,
+      sparkDrag: 1.7,
+      sparkGravity: -14
+    },
+
+    /**
+     * 5 · The void grain.
+     *
+     * Four-pointed shards orbiting the column and rising through it. Each runs
+     * its own loop off one shared clock, so the pool is written once at the
+     * strike and read as a closed form for the rest of the cast — `count` is
+     * therefore very nearly free, and the only real reason to keep it modest is
+     * that a column packed with grain stops being a column.
+     */
+    grain: {
+      enabled: true,
+      /** How many. The ceiling is 320. */
+      count: 240,
+      /** Metres out they start, and how much further they get by the top. */
+      radius: 0.85,
+      spread: 0.6,
+      /** Metres they climb, and radians a second they turn while climbing. */
+      rise: 6.2,
+      swirl: 2.6,
+      /** Metres across one shard, and the seconds one loop takes. */
+      size: 0.075,
+      life: 1.5,
+      /** How long the needles of the star are. High is a sparkle, low is a blob. */
+      spike: 6.0,
+      /** The body of a shard, and the white where its needles cross. */
+      color: '#7a45ff',
+      coreColor: '#e8d8ff',
+      intensity: 2.2
+    },
+
+    /**
+     * One light for the whole cast — hung partway *up* the column.
+     *
+     * Not at its foot: a seven-metre column lit from the ground puts every
+     * shadow on the stage in the wrong place, and what a viewer thinks is
+     * glowing is the middle of it.
+     */
+    light: {
+      /**
+       * Peak, in three.js point-light units, and the metres it carries.
+       *
+       * What actually reaches the lamp is `(hold + gather + flash²)` of this,
+       * so the number below is not the brightest it gets — the frame the column
+       * opens is a little over one and a half times it, and what it settles to
+       * while the beam stands is `hold`'s share of it.
+       */
+      intensity: 42,
+      range: 14,
+      color: '#a06bff',
+      /** Seconds the strike's own flash takes to decay. Squared on the way down. */
+      decay: 0.4,
+      /** How far up the column it hangs, as a fraction of the height reached. */
+      height: 0.42,
+      /** What the column is worth at rest, and what the rune is worth gathering. */
+      hold: 0.45,
+      gather: 0.18
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
   /* The slice                                                           */
   /* ------------------------------------------------------------------ */
   /**
@@ -1871,6 +2754,760 @@ export const settings = {
       flashTime: 0.35,
       distance: 9,
       decay: 1.9
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Ascendance — the light that comes down and stays on you             */
+  /* ------------------------------------------------------------------ */
+  /**
+   * `B` — a shaft of light out of the sky, and ten seconds of being better.
+   *
+   * The only ability in the game that is cast on *yourself* and the only one
+   * whose payload is a duration. Nothing about it is aimed, nothing about it
+   * hits, and everything it is worth is felt through the other moves: while it
+   * is up the body is quicker on its feet and every blow it lands is heavier.
+   *
+   * ## The shape of it
+   *
+   * Five layers, and they are separate systems for the same reason a stylised
+   * summon is authored as separate passes anywhere — each one is doing a
+   * different job and each one has to be dialled on its own:
+   *
+   *  1. `sigil`   — the circle at the feet, written before anything comes down.
+   *  2. `pillar`  — the shaft itself, arriving.
+   *  3. `ribbons` — the spirals winding up it for as long as the boon is held.
+   *  4. `burst`   — one frame of white on the floor as it lands.
+   *  5. `embers`  — the motes rising the whole time.
+   *
+   * See `vfx/Ascendance.js`, which orders them.
+   *
+   * ## The three numbers worth reaching for first
+   *
+   *  - `duration` — how long the boon is up. Ten seconds is long enough to be
+   *    worth the second it costs to call down and short enough that the player
+   *    is spending it rather than living in it.
+   *  - `haste` / `might` — what it is actually *for*. Both are multipliers, and
+   *    both are deliberately large: a buff nobody can feel is a light show.
+   *  - `pillar → height` — how far up the shaft goes before it dissolves. This
+   *    is the number that decides whether the light came out of the sky or out
+   *    of a lamp just off the top of the frame.
+   */
+  ascendance: {
+    enabled: true,
+
+    /**
+     * Seconds the boon is held, measured from the frame the light *lands* —
+     * not from the press.
+     *
+     * That is the whole design of the cost: the second of gathering and
+     * descending is paid before the clock starts, so calling it down in the
+     * middle of a fight is a real decision rather than a free press.
+     */
+    duration: 10,
+
+    /**
+     * Seconds before the end that the column starts pulsing.
+     *
+     * A buff that ends without warning is one the player discovers by finding
+     * their blows suddenly light. 0 switches the warning off.
+     */
+    warn: 1.6,
+
+    /** Metres of knock on the lens the moment the shaft lands. */
+    shake: 0.24,
+
+    /**
+     * What the boon does, as multipliers on the body while it is up.
+     *
+     * Both are ramped down over `beats.fade` rather than switched off, because
+     * a walk that drops from a sprint to a stroll on one frame reads as a bug
+     * in the controller and not as a buff ending.
+     */
+    /** On `locomotion.walkSpeed` and `runSpeed`. */
+    haste: 1.38,
+    /** On the impulse, lift, spin and lens-knock of every blow the player lands. */
+    might: 1.55,
+
+    /**
+     * The choreography, in seconds. `duration` is not one of these — it is the
+     * beat between them.
+     */
+    beats: {
+      /** The circle writing itself at the feet, one full turn. */
+      gather: 0.55,
+      /** The shaft coming down out of the sky. */
+      descend: 0.5,
+      /** After it lands: the bore closing to its resting width, the ribbons up. */
+      settle: 0.55,
+      /** And the shaft being drawn back up into the sky at the end. */
+      fade: 0.95
+    },
+
+    /**
+     * The circle on the floor — `vfx/SummonSeal.js`, the same one the fist
+     * comes through, bound to the height field so it lies on the ground the
+     * player is standing on instead of cutting into it.
+     */
+    sigil: {
+      /** Metres from the centre to the outer ring. Wide enough to stand in. */
+      radius: 2.35,
+      /** Metres off the floor. Enough to beat the depth buffer, not enough to see. */
+      lift: 0.045,
+      /** The lines. */
+      color: '#c98a1e',
+      /** The hot centre, the drawing head, and the flash the light lands in. */
+      coreColor: '#fff1c2',
+      intensity: 1.35,
+      /** Turns a second of the outer band. The inner bands run against it. */
+      spin: 0.05,
+      ticks: 64,
+      runes: 18,
+      spokes: 12,
+      width: 0.009,
+      softness: 0.009,
+      haze: 0.22,
+      detail: 0.5,
+      pulse: 0.22,
+      pulseSpeed: 3.4
+    },
+
+    /**
+     * The shaft — `vfx/LightPillar.js`, one open tube whose entire look is the
+     * cosine between its wall and the eye.
+     */
+    pillar: {
+      /** Metres of bore at rest. Wide enough for a body, narrow enough to be a beam. */
+      radius: 0.8,
+      /**
+       * Metres it reaches up, of which the top `topFade` is dissolving.
+       *
+       * Not as tall as it wants to be, and the reason is the *descent*. The
+       * lens sits behind a body and sees maybe ten metres of air above it; a
+       * shaft that starts twenty-six metres up spends nearly the whole of its
+       * fall out of frame and appears to switch on at the last instant. At
+       * sixteen the light comes down *through* the shot, which is the beat the
+       * ability is built around.
+       */
+      height: 12,
+      color: '#ffcb6a',
+      coreColor: '#fffaef',
+      /**
+       * Deliberately far below every other emissive in the project.
+       *
+       * The shaft is additive, two-sided and standing between the lens and a
+       * dark sky, so the middle of it is being added four or five times over
+       * before anything else in the frame has been drawn. Anything near 1 here
+       * clips the whole column to white and takes the profile — the entire
+       * effect — with it.
+       */
+      intensity: 0.5,
+      /**
+       * How the density falls off across the column.
+       *
+       * `corePower` is the profile through the middle — 1 is a flat disc of
+       * light and anything past about 3 is a thin filament with air around it.
+       * `rimPower` is the skin at the silhouette, and `rim` is how much of it
+       * there is.
+       */
+      corePower: 2.0,
+      /**
+       * The skin at the silhouette, and deliberately almost nothing.
+       *
+       * A rim is what draws an *edge*, and a shaft of light does not have one:
+       * anything much above about 0.2 here turns the column into a rectangle
+       * with a visible boundary, whatever the core is doing inside it.
+       */
+      rimPower: 3.0,
+      rim: 0.14,
+      /**
+       * Fraction of the height the top dissolves over.
+       *
+       * It has to be read together with `gatherHead`, because between them they
+       * decide whether the descent can be *seen*: the shaft exists only between
+       * the front and the start of this fade, and if that window sits above the
+       * few metres of air the lens frames over the body, the light appears to
+       * switch on at the floor rather than to arrive at it.
+       */
+      topFade: 0.3,
+      /** The light falling inside it: how much, how fine, and how fast. */
+      streaks: 0.45,
+      streakScale: 1.1,
+      streakSpeed: 1.6,
+      /** Depth and speed of the breath the standing column sits on. */
+      pulse: 0.14,
+      pulseSpeed: 2.6,
+      /** How much wider the foot of the shaft is where it meets the floor. */
+      flare: 1.45,
+      flareHeight: 0.035,
+      /**
+       * How far down the shaft has already come by the end of the gather, 0..1.
+       *
+       * The split that makes the descent visible at all. Everything above this
+       * fraction of `height` is covered while the circle is still being written
+       * — faint, and above the top of the screen — so that `beats.descend` is
+       * spent entirely on the stretch the lens can actually see. Raise it and
+       * the light is nearly down before the circle is finished; drop it to 0
+       * and the whole fall happens off the top of the frame.
+       */
+      gatherHead: 0.72,
+      /** Extra bore on the frame it arrives, closing over `beats.settle`. */
+      arrivalWidth: 0.55,
+      /** Seconds the white of the landing takes to fall back to nothing. */
+      flashTime: 0.4
+    },
+
+    /**
+     * The spirals — `vfx/RadiantRibbons.js`. One draw call however many there
+     * are, so `count` is very nearly free.
+     */
+    ribbons: {
+      /** How many are winding at once. The buffer is built for 24. */
+      count: 10,
+      color: '#ffb43c',
+      coreColor: '#fff7e2',
+      intensity: 1.15,
+      /** Metres out they ride, and metres up they climb. */
+      radius: 1.28,
+      height: 4.4,
+      /** Turns each one takes over the full climb. */
+      turns: 1.8,
+      /** Length of one ribbon as a fraction of that climb. */
+      span: 0.5,
+      /** Climbs a second, and turns a second on top of the climb. */
+      speed: 0.32,
+      swirl: 0.45,
+      /** Metres across at the head, tapering to nothing at the tail. */
+      width: 0.095,
+      /** What the helix's radius has narrowed to by the top. */
+      topScale: 0.42,
+      /** Depth of the waist in that radius, so the column is not a cylinder. */
+      waist: 0.13,
+      /** Falloff across the ribbon, and the tighter one the white core takes. */
+      softness: 1.6,
+      corePower: 7.0
+    },
+
+    /** The flash on the floor as it lands — `vfx/ManifestBurst.js`. */
+    burst: {
+      /** Metres the fan reaches. */
+      radius: 4.4,
+      /** Seconds it takes to burn out. */
+      life: 0.7,
+      color: '#ffc65c',
+      coreColor: '#fffdf4',
+      intensity: 2.4,
+      /** Spikes in the fan, and how wide and how long they are. */
+      petals: 16,
+      petalWidth: 0.085,
+      petalLength: 0.95,
+      /** The front at the outside of them. */
+      ringWidth: 0.05,
+      softness: 0.1,
+      /** The hot disc in the middle, which collapses faster than anything else. */
+      core: 1.9,
+      /** Metres off the floor. */
+      lift: 0.05
+    },
+
+    /** The motes — `vfx/HolyEmbers.js`. */
+    embers: {
+      color: '#ffc861',
+      coreColor: '#fff8e6',
+      intensity: 0.6,
+      /** Motes a second while the boon is held, and while it is still gathering. */
+      rate: 32,
+      gatherRate: 12,
+      /** And the handful thrown up on the frame it lands. */
+      burst: 120,
+      /** How far out of the sigil they are born, as a fraction of its radius. */
+      spread: 0.92,
+      /** Seconds one lives, before its own scatter. */
+      life: 2.7,
+      /** Metres a second off the floor. */
+      speed: 1.4,
+      /** Metres up a mote may be born, so the field is not one lifting sheet. */
+      spawnHeight: 1.7,
+      /**
+       * Air resistance, and the pull *upward* underneath it.
+       *
+       * The acceleration is positive here and negative on every other particle
+       * system in the project — that sign is the entire difference between an
+       * ember rising out of something holy and a spark falling off a sword.
+       */
+      drag: 1.1,
+      rise: 1.5,
+      /** Metres across at birth, and how much of that it gains over its life. */
+      size: 0.042,
+      grow: 0.4,
+      /** Metres of wander, and how fast it wanders. */
+      sway: 0.33,
+      swaySpeed: 1.4,
+      /** The round glow behind the diamond, and how hard the diamond's own edge is. */
+      halo: 0.5,
+      sharpness: 0.3,
+      /** Depth of the shimmer. Each mote is on its own beat. */
+      twinkle: 0.45,
+      /**
+       * Radians a second one may turn, either way.
+       *
+       * Small on purpose. A diamond turned forty-five degrees is a square, and
+       * a field of them spinning freely is half squares at any given moment —
+       * which is not what the shape is for. This is enough to keep them from
+       * being a stamped set and not enough to lose the point.
+       */
+      spin: 0.9
+    },
+
+    /**
+     * The one part of the ability that lights anything.
+     *
+     * Every layer above is additive and lights nothing at all, so without this
+     * the body standing in the middle of a column of light would be exactly as
+     * dark as it was before the sky opened.
+     */
+    light: {
+      color: '#ffc861',
+      /** While the boon is held. */
+      intensity: 6,
+      /** And on the frame it lands, decaying with the shaft's own flash. */
+      flash: 30,
+      /** Where it hangs, as a fraction of the body's height. */
+      height: 0.62,
+      distance: 11,
+      decay: 1.8
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Shadow Boost — the dark that comes up and stays on you              */
+  /* ------------------------------------------------------------------ */
+  /**
+   * `M` — a column of shadow out of the floor, and seconds of being worse to
+   * stand near.
+   *
+   * The second self-cast boon, and deliberately the *opposite* of `ascendance`
+   * in every reading rather than the same effect in another colour:
+   *
+   *  - the light is called **down** out of the sky; this comes **up** out of
+   *    the ground.
+   *  - the light is drawn in hard-edged geometry — a struck circle, a shaft, a
+   *    fan of petals. This is **soft**: smoke, wisps, a torn vortex.
+   *  - and the light is bright everywhere, where the middle of this is **darker
+   *    than the world behind it**. That is the one thing no additive effect in
+   *    the project had ever done, and it is why two of the five layers are on
+   *    `NormalBlending` — see `vfx/DarkPillar.js`.
+   *
+   * What the two boons are *worth* differs on the same axis. Ascendance is
+   * mostly haste with weight behind it; this is mostly weight with a little
+   * haste — it does not make the body quick, it makes what the body lands
+   * ruinous. Both are up at once if you cast both, and `App#_might` multiplies
+   * them, which is expensive on purpose.
+   *
+   * ## The shape of it
+   *
+   * Five layers, and they are separate systems for the same reason a stylised
+   * aura is authored as separate passes anywhere — each one is doing a
+   * different job and each one has to be dialled on its own:
+   *
+   *  1. `glow`   — the pool of violet on the floor, under everything.
+   *  2. `rings`  — the ground standing up in fronts, running outward.
+   *  3. `column` — the shaft of dark energy, arriving.
+   *  4. `wisps`  — the smoke curling up it for as long as the boon is held.
+   *  5. `swirl`  — the torn shadow going round the body.
+   *
+   * See `vfx/ShadowBoost.js`, which orders them.
+   *
+   * ## The three numbers worth reaching for first
+   *
+   *  - `duration` — how long the boon is up.
+   *  - `might` — what it is actually for. A buff nobody can feel is a light
+   *    show, and this one is not even a light show.
+   *  - `column → shade` — how much the column darkens what is behind it. This
+   *    is the number that decides whether the effect reads as shadow or as a
+   *    purple lamp, and it is the first one to reach for if it looks like the
+   *    latter.
+   */
+  shadowBoost: {
+    enabled: true,
+
+    /**
+     * Seconds the boon is held, measured from the frame the column *breaks
+     * through* — not from the press.
+     *
+     * The same bargain the light makes: the moment of gathering is paid before
+     * the clock starts, so calling it up in the middle of a fight is a real
+     * decision rather than a free press.
+     */
+    duration: 10,
+
+    /**
+     * Seconds before the end that the column starts pulsing.
+     *
+     * A buff that ends without warning is one the player discovers by finding
+     * their blows suddenly light. 0 switches the warning off.
+     */
+    warn: 1.6,
+
+    /** Metres of knock on the lens the moment the column comes through. */
+    shake: 0.22,
+
+    /**
+     * What the boon does, as multipliers on the body while it is up.
+     *
+     * Both are ramped down over `beats.fade` rather than switched off, because
+     * a walk that drops from a sprint to a stroll on one frame reads as a bug
+     * in the controller and not as a buff ending.
+     *
+     * The split is the whole character of the ability against the light's:
+     * barely any haste, and more `might` than ascendance has. Shadow does not
+     * make you quick.
+     */
+    /** On `locomotion.walkSpeed` and `runSpeed`. */
+    haste: 1.12,
+    /** On the impulse, lift, spin and lens-knock of every blow the player lands. */
+    might: 1.75,
+
+    /**
+     * The choreography, in seconds. `duration` is not one of these — it is the
+     * beat between them.
+     */
+    beats: {
+      /** The pool opening at the feet, before anything has come up. */
+      gather: 0.45,
+      /** The column tearing up out of the floor. */
+      erupt: 0.4,
+      /** After it breaks through: the bore closing to its resting width. */
+      settle: 0.5,
+      /** And the column being drawn back down into the ground at the end. */
+      fade: 0.85
+    },
+
+    /**
+     * Layer 1 — the base glow. `vfx/ShadowPool.js`, bound to the height field.
+     *
+     * It has no shape at all and that is its job: it is the light source the
+     * other four layers are seen against. Turn it off and the ability is a set
+     * of dark shapes over dark ground.
+     */
+    glow: {
+      /** Metres from the middle to where the spill has run out. */
+      radius: 2.4,
+      /** Metres off the floor. Enough to beat the depth buffer, not enough to see. */
+      lift: 0.03,
+      /**
+       * Bluer than everything above it, and on purpose.
+       *
+       * In the reference the pool is the one part of the aura that reads as a
+       * *source* rather than as smoke lit by one, and the eye is told that by
+       * hue as much as by brightness: the column and the rings are violet, and
+       * the light they are standing in is a shade nearer blue, the way the hot
+       * middle of a flame is.
+       */
+      color: '#5a3cff',
+      coreColor: '#9a86ff',
+      intensity: 1.4,
+      /**
+       * How the spill falls off. Low is a wide flat wash; high is a tight bloom
+       * with dark floor around it.
+       */
+      falloff: 2.2,
+      /** How much of the radius the hot middle takes, and how tight it is in it. */
+      core: 0.22,
+      corePower: 2.0,
+      /** Depth and speed of the breath under it. */
+      pulse: 0.16,
+      pulseSpeed: 2.2,
+      /** How mottled the pool is, how fine the mottling, and how fast it crawls. */
+      mottle: 0.35,
+      mottleScale: 2.1,
+      mottleSpeed: 0.22
+    },
+
+    /**
+     * Layer 2 — the ground distortion. `vfx/DistortionRings.js`.
+     *
+     * Concentric fronts running outward, each with a dark trough on its inside
+     * edge. The trough is what stands them up: a bright line on the floor is a
+     * decal, and a bright line with a shadow behind it is a ridge.
+     */
+    rings: {
+      /** Metres the outermost front reaches. Wider than the pool, on purpose. */
+      radius: 3.1,
+      lift: 0.045,
+      color: '#a48cff',
+      coreColor: '#f2ecff',
+      intensity: 1.3,
+      /** How many fronts are on the disc at once. */
+      rings: 4,
+      /**
+       * Fronts a second past any given point.
+       *
+       * Slow. In the reference these are barely moving — they read as the
+       * ground being *held* open rather than as a shockwave, and anything past
+       * about 1 turns the aura into a sonar ping.
+       */
+      speed: 0.35,
+      /** Width of the bright band, and the feather on it. */
+      width: 0.035,
+      softness: 0.02,
+      /**
+       * The bloom either side of the band, and how far into the floor it
+       * carries.
+       *
+       * Without it the fronts are hairlines. The reference's rings are *lit*:
+       * a bright line with light spilling off it into the stone.
+       */
+      glow: 0.28,
+      glowWidth: 0.16,
+      /** Depth of the trough behind each front, and how far back it reaches. */
+      trough: 0.5,
+      troughWidth: 0.12,
+      /**
+       * How far a front is pushed off a true circle, and how fine that push is.
+       *
+       * This is the "distortion" of the name. At 0 they are compass circles and
+       * the floor reads as a target decal; a very little of it is enough.
+       */
+      warp: 0.014,
+      warpScale: 4.5,
+      warpSpeed: 0.22,
+      /** Turns a second of the whole warped field. */
+      spin: -0.05
+    },
+
+    /**
+     * Layer 3 — the dark energy column. `vfx/DarkPillar.js`, two tubes.
+     *
+     * `shade` is the one to reach for: it is how much the near-black tube
+     * dims what is behind it, and it is the difference between a shaft of
+     * shadow and a violet lamp.
+     */
+    column: {
+      /** Metres of bore at rest. Wide enough for a body to stand in. */
+      radius: 0.45,
+      /**
+       * Metres it reaches up.
+       *
+       * Tall enough to leave the top of the shot, as it does in the reference —
+       * the column is the one part of the effect the player is meant to see
+       * from across the field, and one that ends tidily in mid-air at head
+       * height reads as a prop rather than as something torn open.
+       */
+      height: 9,
+      color: '#8b5cff',
+      coreColor: '#f0e8ff',
+      /** The tube that darkens the silhouette. Nearly black, and never quite. */
+      shadeColor: '#0a0714',
+      /**
+       * Brightness of the half that adds.
+       *
+       * Held well under 1: the glow is two-sided and additive, so the middle of
+       * the column is added twice over before anything else in the frame has
+       * been drawn, and anything near 1 clips the whole shaft to white and
+       * takes the profile — the entire effect — with it.
+       */
+      intensity: 0.85,
+      /**
+       * And the half that subtracts: peak opacity of the dark tube at the
+       * **silhouette**, where the wall is grazing.
+       *
+       * Because it is held to the rim rather than the axis (see
+       * `vfx/DarkPillar.js`), this can be generous without touching the
+       * character standing in the middle. It is what gives the shaft an outside
+       * as well as an inside.
+       */
+      shade: 0.75,
+      /** How hard the dark is held to that silhouette. Higher is a thinner edge. */
+      shadePower: 2.4,
+      /**
+       * The profile through the middle — the length of the eye's ray through
+       * the column, which is what makes it read as a volume.
+       *
+       * 1 is a flat disc of light and anything past about 3.5 is a thin
+       * filament with air around it.
+       */
+      corePower: 3.2,
+      /**
+       * The skin at the silhouette, and deliberately almost nothing.
+       *
+       * A rim draws an *edge*, and a shaft of energy does not have one — past
+       * about 0.3 the column becomes a rectangle with a visible boundary,
+       * whatever the core is doing inside it. The dark tube is what defines
+       * this shaft's edge; the glow only accents it.
+       */
+      rimPower: 3.0,
+      rim: 0.18,
+      /** Fraction of the risen height the top dissolves over. */
+      topFade: 0.5,
+      /** What falls through the core: how much of it, how fine, and how fast. */
+      streaks: 0.6,
+      streakScale: 2.0,
+      streakSpeed: 1.5,
+      /**
+       * The lightning.
+       *
+       * `veinRate` is strikes a second and is the one that matters: it is a
+       * *quantised* clock, so each beat replaces the bolt outright rather than
+       * sliding it along. Below about 3 the column reads as flickering; above
+       * about 12 the strikes blur into a constant seethe.
+       */
+      veins: 0.6,
+      veinScale: 2.2,
+      veinRate: 7,
+      veinPower: 11,
+      /** How much of a bolt is split into forks rather than left as one trunk. */
+      veinBranch: 0.55,
+      /**
+       * What the wall between the lens and the body is worth, against the far
+       * one.
+       *
+       * The tube is two-sided and both walls add, which is what gives a shaft
+       * its density — and is also what paints the character out of the middle
+       * of their own ability. This moves that light to the side of the body
+       * that can afford it. At 1 the column is at full strength and the player
+       * is a smear inside it; at 0 the shaft is hollow from the front.
+       */
+      front: 0.5,
+      /** Depth and speed of the breath the standing column sits on. */
+      pulse: 0.16,
+      pulseSpeed: 2.8,
+      /** How much wider the foot is where it comes out of the floor. */
+      flare: 1.35,
+      flareHeight: 0.07,
+      /** Extra bore on the frame it arrives, closing over `beats.settle`. */
+      arrivalWidth: 0.7,
+      /** Seconds the white of the break-through takes to fall back to nothing. */
+      flashTime: 0.35
+    },
+
+    /**
+     * Layer 4 — the rising wisps. `vfx/SmokeWisps.js`. One draw call however
+     * many there are, so `count` is very nearly free — the buffer is built
+     * for 24.
+     */
+    wisps: {
+      count: 12,
+      /** The body of the smoke, and the fringe where the aura shows through it. */
+      color: '#453564',
+      rimColor: '#7c5cf0',
+      opacity: 0.5,
+      rim: 0.8,
+      /** Metres out they stand at the floor, and metres up they climb. */
+      radius: 1.05,
+      height: 4.2,
+      /** Turns each one takes over the climb, and the drift of the whole set. */
+      curl: 0.75,
+      writhe: 0.3,
+      /** Metres of the slow second wander laid over that curl. */
+      sway: 0.42,
+      /** Length of one wisp as a fraction of the climb. */
+      span: 0.62,
+      /** Climbs a second. */
+      speed: 0.24,
+      /**
+       * Metres across at the floor, and how much it has spread by the top.
+       *
+       * Thin. These are *threads* in the reference, not plumes — the wide,
+       * soft mass in the air is the swirl's job, and a set of broad ribbons
+       * here competes with it and wins, which leaves the aura looking like fog
+       * rather than like smoke rising out of something.
+       */
+      width: 0.18,
+      spread: 2.2,
+      /** What the standing radius has widened to by the top. */
+      topScale: 1.3,
+      /** Falloff across the wisp. */
+      softness: 1.3,
+      /** How fine the tear along one is, how fast it crawls, and how deep it bites. */
+      detail: 3.2,
+      churn: 0.45,
+      erode: 0.45
+    },
+
+    /**
+     * Layer 5 — the swirling shadow. `vfx/ShadowSwirl.js`.
+     *
+     * The fast, horizontal layer, against the wisps' slow vertical one. The
+     * ability needs both or the whole aura reads as one motion.
+     */
+    swirl: {
+      color: '#4a3a68',
+      rimColor: '#8b5cf6',
+      opacity: 0.62,
+      rim: 0.9,
+      /** Puffs a second while the boon is held, and while it is still gathering. */
+      rate: 34,
+      gatherRate: 12,
+      /** And the handful thrown out on the frame it breaks through. */
+      burst: 90,
+      /** How far out they are born, as a fraction of the pool's radius. */
+      spread: 0.68,
+      /** Seconds one lives. */
+      life: 2.4,
+      /**
+       * Radians a second at the pool's own radius.
+       *
+       * Puffs born nearer the middle wind faster than this in proportion, which
+       * is what makes it a vortex rather than a turntable.
+       */
+      spin: 2.4,
+      /**
+       * Whether half of them turn the other way.
+       *
+       * Off by default, and it is the right default: a vortex has a direction,
+       * and a set that argues about which one reads as a cloud of insects. On,
+       * it is chaos — which is a look, but it is not this one.
+       */
+      reverse: false,
+      /** Fraction the orbit widens over a life. Negative draws them inward. */
+      widen: 0.3,
+      /** Metres a second the field lifts. */
+      rise: 0.5,
+      /** Metres up a puff may be born, so the swirl is a column and not a sheet. */
+      spawnHeight: 2.4,
+      /** Metres across at birth, and how much of that it gains over its life. */
+      size: 0.55,
+      grow: 0.95,
+      /**
+       * How far a puff is drawn out along its own orbit.
+       *
+       * The single number that decides whether this layer is a spiral or a
+       * cloud of blobs. 1 is a ball; at 2.5 or so each puff is a short arc of
+       * smoke, and arcs at radii that turn at different rates shear into arms
+       * on their own — which is how a real spiral forms and the only way to get
+       * one out of billboards. See `vfx/ShadowSwirl.js`.
+       */
+      stretch: 2.6,
+      /** Metres of wander, and how fast it wanders. */
+      wobble: 0.3,
+      wobbleSpeed: 1.5,
+      /** How fine the fbm across one puff is, and how fast it churns. */
+      detail: 1.7,
+      churn: 0.45,
+      /** The soft inner edge of a puff, and how hard its outline is eaten away. */
+      softness: 0.15,
+      erode: 0.55
+    },
+
+    /**
+     * The one part of the ability that lights anything.
+     *
+     * Three of the five layers add and light nothing; the other two *darken*.
+     * So without this the body in the middle of a column of shadow would be
+     * dimmer than before the ability started and lit by nothing at all, which
+     * is the one outcome that would make the effect read as a mistake.
+     */
+    light: {
+      color: '#8b5cff',
+      /** While the boon is held. */
+      intensity: 8,
+      /** And on the frame it breaks through, decaying with the column's flash. */
+      flash: 26,
+      /** Where it hangs, as a fraction of the body's height. */
+      height: 0.6,
+      distance: 10,
+      decay: 1.8
     }
   },
 

@@ -1,3 +1,5 @@
+import { Vector3 } from 'three';
+
 import { Renderer } from './Renderer.js';
 import { Time } from './Time.js';
 import { CameraRig } from './CameraRig.js';
@@ -26,7 +28,11 @@ import { PostProcessing } from '../postprocessing/PostProcessing.js';
 import { BloodBurst } from '../vfx/BloodBurst.js';
 import { ShadowCharacter } from '../vfx/ShadowCharacter.js';
 import { Judgement } from '../vfx/Judgement.js';
+import { Ascendance } from '../vfx/Ascendance.js';
+import { ShadowBoost } from '../vfx/ShadowBoost.js';
 import { BladeStorm } from '../vfx/BladeStorm.js';
+import { SwordCombo } from '../vfx/SwordCombo.js';
+import { RunicBeam } from '../vfx/RunicBeam.js';
 import { TargetRings } from '../vfx/TargetRings.js';
 import { TargetMarkers } from '../vfx/TargetMarkers.js';
 import { HealthBars } from '../vfx/HealthBars.js';
@@ -42,6 +48,9 @@ import { TargetHotkeys } from '../ui/TargetHotkeys.js';
 import { settings } from '../config/settings.js';
 
 const HDR_URL = './hdri/spruit_sunrise.hdr';
+
+/** Where a thrown cut leaves the body, resolved per beat and never held. */
+const _blade = new Vector3();
 
 /**
  * Application root: owns every subsystem and the frame loop.
@@ -230,7 +239,33 @@ export class App {
     });
     this.scene.add(this.judgement.group);
 
-    // The third of them, and the only one that is a *mode*: while `X` has the
+    // The fourth, and the odd one out: it is not aimed at anybody, it does not
+    // hit anything, and what it leaves behind is ten seconds rather than a
+    // corpse. It needs the ground for its circle to lie on and somewhere to
+    // send the knock its arrival puts on the lens — nothing else, because
+    // nothing else in the world is involved. What the boon *does* is spent from
+    // `_syncBoon` and `_onStrike`; this only says whether it is up.
+    this.ascendance = new Ascendance({
+      terrain: this.terrain,
+      onManifest: (shake) => this.rig.shake(shake),
+      onExpire: () => this.toast.show('The light leaves you')
+    });
+    this.scene.add(this.ascendance.group);
+
+    // And its opposite: the same bargain — no aim, no target, a duration for a
+    // payload — arrived at from the other direction. It needs exactly what the
+    // light needs and for the same reasons: the ground for its pool and its
+    // rings to lie on, and somewhere to send the knock its arrival puts on the
+    // lens. What its boon is worth is spent from `_syncBoon` and `_onStrike`
+    // alongside the light's; this only says whether it is up.
+    this.shadowBoost = new ShadowBoost({
+      terrain: this.terrain,
+      onErupt: (shake) => this.rig.shake(shake),
+      onExpire: () => this.toast.show('The dark goes back into the ground')
+    });
+    this.scene.add(this.shadowBoost.group);
+
+    // The third of the summons, and the only one that is a *mode*: while `X` has the
     // body in the air, every body marked forges a blade out of the weapon that
     // is actually equipped and hangs it around the character until it is
     // loosed. The equipment is asked for rather than held — the loadout does
@@ -242,6 +277,30 @@ export class App {
       onStrike: (enemy, x, z, force) => this._onStrike(enemy, x, z, force)
     });
     this.scene.add(this.blades.group);
+
+    // Everything the three-hit combo (`Z`) throws. Unlike the three above it is
+    // not an ability and arms nothing: it is dressing for an ordinary attack,
+    // and it is here rather than inside that attack because `animation/Attack.js`
+    // knows only which frame a blow is on. What a blow *looks like* has never
+    // been its business.
+    //
+    // `onWound` is the half of the move the animation cannot express: a thrown
+    // cut takes time to arrive, so the first two beats are dealt on the frame
+    // the crescent lands rather than on the frame the sweep played.
+    this.swordCombo = new SwordCombo({
+      terrain: this.terrain,
+      onWound: (enemy, x, z) => this._onComboWound(enemy, x, z)
+    });
+    this.scene.add(this.swordCombo.group);
+
+    // And everything the unmaking (`B`) calls up. On the same terms as the
+    // combo and for the same reason: it is dressing for an ordinary attack
+    // whose two beats happen not to be punches, and it arms nothing and decides
+    // nothing. It is handed the height field because the rune it opens is
+    // struck into the *ground* under a body rather than hung over one, and a
+    // circle three metres across on a slope has to lie on it.
+    this.runicBeam = new RunicBeam({ terrain: this.terrain });
+    this.scene.add(this.runicBeam.group);
 
     // Who they are sent at. `V` and `Q` arm rather than casting: the body under
     // the aim wears a diamond, a left click locks it, and the last lock is what
@@ -348,6 +407,16 @@ export class App {
      */
     this._marked = [];
 
+    /**
+     * A blow's force, with the boon's weight already in it.
+     *
+     * Rebuilt in place per landed hit rather than allocated, and only reached
+     * for while `ascendance` is up — with no boon the move's own settings block
+     * is handed straight through, which is what keeps the common case exactly
+     * as it was before the ability existed. See `_strikeForce`.
+     */
+    this._boonForce = { impulse: 0, lift: 0, spin: 0, slices: false, unmake: null };
+
     /* ---- post ---- */
     this.post = new PostProcessing(this.renderer, this.scene, this.camera);
 
@@ -370,7 +439,9 @@ export class App {
         this.enemies.respawnAll();
         this.toast.show('A fresh ring of them');
       },
-      onCastJudgement: () => this._castJudgement()
+      onCastJudgement: () => this._castJudgement(),
+      onCastAscendance: () => this._castAscendance(),
+      onCastShadowBoost: () => this._castShadowBoost()
     });
 
     /**
@@ -485,6 +556,20 @@ export class App {
           }
           break;
         }
+        case 'KeyN': {
+          // One of the two abilities with nothing to aim, so it is one of the
+          // two a single press casts outright. Held down it would try again
+          // every frame and be refused every frame, which is a lot of nothing.
+          if (this.inCharacterScreen || event.repeat) break;
+          this._castAscendance();
+          break;
+        }
+        case 'KeyM': {
+          // The other one, and the same discipline for the same reason.
+          if (this.inCharacterScreen || event.repeat) break;
+          this._castShadowBoost();
+          break;
+        }
         case 'KeyC': {
           if (this.inCharacterScreen) break;
           if (this._groundedOnly()) break;
@@ -542,6 +627,84 @@ export class App {
     if (id === 'weapon') this._switchWeapon();
     else if (id === 'shoulder') this._swapShoulder();
     else if (id === 'customize') this.toggleCharacterScreen();
+    else if (id === 'ascendance') this._castAscendance();
+    else if (id === 'shadowBoost') this._castShadowBoost();
+  }
+
+  /**
+   * Call the light down on yourself.
+   *
+   * The only cast in the game that asks no question first: there is no body to
+   * mark, no cone to be inside and no reach to be within, because the thing it
+   * lands on is already standing here. So every refusal it can give is about
+   * *when* rather than about where, and each of them costs a line of text —
+   * a press that did nothing at all would read as a dropped key.
+   */
+  _castAscendance() {
+    // The editor's button reaches this from either stage, and there is nothing
+    // on the set for a shaft of light to come down onto — nor a frame loop that
+    // would advance it if there were.
+    if (this.inCharacterScreen) {
+      this.toast.show('Not in here — the light needs the stage');
+      return;
+    }
+    if (this._groundedOnly()) return;
+    if (!settings.ascendance.enabled) {
+      this.toast.show('Ascendance is switched off in the editor');
+      return;
+    }
+    if (this.ascendance.active) {
+      this.toast.show(
+        this.ascendance.held
+          ? `The light is already on you — ${Math.ceil(this.ascendance.remaining)}s`
+          : 'It is already coming down'
+      );
+      return;
+    }
+
+    const position = this.character.position;
+    const groundY = this.terrain.heightAt(position.x, position.z);
+    if (!this.ascendance.cast(position.x, groundY, position.z)) return;
+    this.toast.show(`Ascendance — ${settings.ascendance.duration}s of it, once the light lands`);
+  }
+
+  /**
+   * Call the dark up out of the ground under yourself.
+   *
+   * The same shape as `_castAscendance` line for line, because it is the same
+   * *kind* of cast: nothing to aim, nothing to be in reach of, and therefore
+   * nothing to refuse for except *when*. The two boons are deliberately not
+   * exclusive — holding both at once is expensive in seconds and should be
+   * worth what it costs, and `_might` multiplies them.
+   */
+  _castShadowBoost() {
+    // The editor's button reaches this from either stage, and there is nothing
+    // on the set for a column of shadow to come up through — nor a frame loop
+    // that would advance it if there were.
+    if (this.inCharacterScreen) {
+      this.toast.show('Not in here — the dark needs ground to come out of');
+      return;
+    }
+    if (this._groundedOnly()) return;
+    if (!settings.shadowBoost.enabled) {
+      this.toast.show('Shadow Boost is switched off in the editor');
+      return;
+    }
+    if (this.shadowBoost.active) {
+      this.toast.show(
+        this.shadowBoost.held
+          ? `The dark is already on you — ${Math.ceil(this.shadowBoost.remaining)}s`
+          : 'It is already coming up'
+      );
+      return;
+    }
+
+    const position = this.character.position;
+    const groundY = this.terrain.heightAt(position.x, position.z);
+    if (!this.shadowBoost.cast(position.x, groundY, position.z)) return;
+    this.toast.show(
+      `Shadow Boost — ${settings.shadowBoost.duration}s of it, once the column is through`
+    );
   }
 
   /**
@@ -700,11 +863,28 @@ export class App {
     // scene either.
     this.shadows.dismiss({ immediate: true });
     this.judgement.dismiss({ immediate: true });
+    // And the boon, which is the one of the four that is standing *on* the body
+    // rather than out in the world — and is therefore the one that would come
+    // along. It must not: a column of light twenty-six metres tall is not a
+    // thing to judge a pauldron against.
+    this.ascendance.dismiss({ immediate: true });
+    // And the other one, for the same reason and rather more so: a column of
+    // shadow standing on the turntable would not only compete with the
+    // pauldron being judged, it would be *darkening* it.
+    this.shadowBoost.dismiss({ immediate: true });
     // And the halo, along with the mode that raised it: the body is about to be
     // stood on a turntable indoors, and it cannot be hovering when it gets there.
     this.character.flight?.cancel();
     this.flightMarking.end();
     this.blades.dismiss({ immediate: true });
+    // And any cut still in the air. Nothing it was thrown at exists on the set,
+    // and a crescent left crossing an empty stage would be the first thing the
+    // studio's lens found.
+    this.swordCombo.clear();
+    // And the beam, along with the rune under it. Both are struck into ground
+    // that does not exist on the set, and a column of void standing in an
+    // equipment studio is not a look anybody asked for.
+    this.runicBeam.dismiss({ immediate: true });
     // And the rifle's own layers, which are the one thing on the body that is
     // not driven from the frame loop's play branch: the studio has its own
     // update path, so a torso left twisted toward a reticle in another scene
@@ -744,10 +924,198 @@ export class App {
    * @param {object} config the striking move's settings block
    */
   _onStrike(enemy, x, z, config) {
-    if (!this.enemies.kill(enemy, x, z, config)) return;
+    const might = this._might();
+    if (!this.enemies.kill(enemy, x, z, this._strikeForce(config, might))) return;
     this._hitStop = config.hitStop;
     this._hitStopScale = config.hitStopScale;
-    this.rig.shake(config.shake);
+    // The lens is knocked harder too. It is the cheapest half of a boon and
+    // very nearly the whole of what the player actually feels: a body thrown
+    // further is something they watch, and a camera that jumps is something
+    // that happens to them.
+    this.rig.shake(config.shake * might);
+  }
+
+  /**
+   * The blow, with the boon's weight in it.
+   *
+   * Only the three numbers a ragdoll is handed are touched — how hard it goes,
+   * how far up, and how much the upper body takes — because those are the whole
+   * of what "heavier" can mean to a body that is already dead. The freeze is
+   * deliberately *not* scaled: hit-stop is pacing, and a buff that made every
+   * kill hold the world for longer would make the fight slower while making the
+   * character faster.
+   *
+   * @param {object} config the striking move's settings block
+   * @param {number} might the multiplier from `_might`, 1 when nothing is up
+   * @returns {object} `config` itself when there is no boon — the common case
+   *   allocates nothing and changes nothing
+   */
+  _strikeForce(config, might) {
+    if (might <= 1) return config;
+    const force = this._boonForce;
+    force.impulse = config.impulse * might;
+    force.lift = config.lift * might;
+    force.spin = config.spin * might;
+    // Whether the blow comes apart is the move's own answer and never the
+    // boon's: a kick does not start cutting people in half because the sky
+    // opened. Nor does the beam stop unmaking what it takes because it does.
+    force.slices = config.slices === true;
+    force.unmake = config.unmake ?? null;
+    return force;
+  }
+
+  /**
+   * The boons' multiplier on a blow, each ramped in with its own power.
+   *
+   * There are two of them and they *multiply* rather than taking the larger.
+   * That is a real decision and it is the right one: standing in both a column
+   * of light and a column of shadow costs two casts and two seconds of standing
+   * still, and a player who has paid for both should be handed something
+   * absurd. Neither ability knows the other exists — this line is the only
+   * place in the project where they meet.
+   */
+  _might() {
+    const light = this.ascendance.power;
+    const dark = this.shadowBoost.power;
+    let might = 1;
+    if (light > 0) might *= 1 + (settings.ascendance.might - 1) * light;
+    if (dark > 0) might *= 1 + (settings.shadowBoost.might - 1) * dark;
+    return might;
+  }
+
+  /**
+   * Hand the boons to the body.
+   *
+   * The other half of what a boon is worth, and the half that is felt every
+   * frame rather than on a landed hit. It is one number written onto the
+   * controller — see `ThirdPersonController#speedScale` — which is deliberately
+   * all the coupling there is: neither ability knows the character exists, and
+   * the controller does not know what a boon is.
+   *
+   * The two stack the same way they do on a blow, and are worth very different
+   * amounts here: the light is mostly haste, and the dark is barely any.
+   */
+  _syncBoon() {
+    const light = this.ascendance.power;
+    const dark = this.shadowBoost.power;
+    let scale = 1;
+    if (light > 0) scale *= 1 + (settings.ascendance.haste - 1) * light;
+    if (dark > 0) scale *= 1 + (settings.shadowBoost.haste - 1) * dark;
+    this.controller.speedScale = scale;
+  }
+
+  /**
+   * One blow out of a move, routed to whichever thing it turns out to be.
+   *
+   * Most attacks land once and land in person, so `beat` is null and this is
+   * `_onStrike` with an extra frame of indirection. The two that state `hits`
+   * are the interesting ones, and between them they cover every shape a beat
+   * can have:
+   *
+   *  - the combo's opening two are cuts being *thrown*, and what they do
+   *    happens when they arrive rather than on the frame the sweep played;
+   *  - the unmaking's first is a beat that does nothing at all to anybody — it
+   *    opens a rune and stops;
+   *  - and both moves' last beats are the body going down, by very different
+   *    routes.
+   *
+   * The branch is on `kind` rather than on the move's identity, so a third
+   * multi-hit clip would only have to describe its beats to get the same
+   * treatment — nothing here knows either move by name.
+   *
+   * @param {object} config the striking move's settings block
+   * @param {object|null} beat the `hits` entry that fired, for a move with any
+   */
+  _onBeat(enemy, x, z, config, beat) {
+    if (beat?.kind === 'wave') {
+      this.swordCombo.throwWave(this._bladePoint(), enemy, beat);
+      return;
+    }
+
+    // The unmaking's first strike. It is the only beat in the game that reaches
+    // a body and costs it nothing: the rune is a promise, and the thing that
+    // keeps it is the beat below.
+    if (beat?.kind === 'rune') {
+      this.runicBeam.open(enemy);
+      return;
+    }
+
+    // And its second. The column opens *before* the kill, so it is centred on a
+    // body that is still standing on its own feet — a corpse's position is the
+    // ragdoll's, and by the next frame it is already sliding out of the rune it
+    // was supposed to be unmade in.
+    if (beat?.kind === 'unmake') {
+      this.runicBeam.fire(enemy);
+    }
+
+    // The finisher, and every other move in the game: the body goes down here.
+    // The rift opens *before* the kill so it is centred on a body that is still
+    // standing — a corpse's position is the ragdoll's, and by the next frame it
+    // is already falling away from where the blade actually met it.
+    if (beat?.kind === 'finish') {
+      const position = enemy.position;
+      this.swordCombo.finish(
+        position.x,
+        position.y + Math.max(0, config.wave.aimHeight),
+        position.z,
+        x,
+        z,
+        beat
+      );
+    }
+    this._onStrike(enemy, x, z, config);
+  }
+
+  /**
+   * A thrown cut reached somebody who is still standing.
+   *
+   * Deliberately not `_onStrike`: this is the *opening* of a combo, and the
+   * body is meant to still be there for the finisher. So it spends health and
+   * knocks the lens, and that is all — no hit-stop, because freezing the world
+   * twice on the way to a third blow would make the move feel like three moves,
+   * and no kill, because `settings.swordCombo.wound` is tuned so that two of
+   * them cannot take a body to zero.
+   *
+   * If something else has already worn it down far enough that one of these
+   * does finish it, it falls on the cut's own bearing with the move's own
+   * force — the same path the finisher takes, so the corpse never comes apart
+   * differently depending on which beat happened to be the last one.
+   */
+  _onComboWound(enemy, x, z) {
+    const config = settings.swordCombo;
+    if (!enemy?.alive) return;
+
+    this.rig.shake(config.woundShake);
+    if (enemy.wound(config.wound) !== 'down') return;
+    this._onStrike(enemy, x, z, config);
+  }
+
+  /**
+   * Where the edge is, for a cut about to leave it.
+   *
+   * The sword hand if the rig has one, which it does — read a frame late,
+   * because the skeleton for this frame is posed in `character.update` and the
+   * beat that asks for this fires in `controller.update` before it. At a hand's
+   * speed through a sweep that is a few centimetres, and the crescent is thrown
+   * along a line resolved from the *target* rather than from the hand, so the
+   * only thing the staleness moves is where the launch flash sits.
+   *
+   * The fallback is the chest, which is where a viewer would say a cut came
+   * from anyway if they had to guess.
+   */
+  _bladePoint() {
+    const hand = this.character.getBone?.('RightHand');
+    if (hand) {
+      hand.getWorldPosition(_blade);
+      return _blade;
+    }
+    const position = this.character.position;
+    const yaw = this.character.facing;
+    return _blade.set(
+      position.x + Math.sin(yaw) * 0.5,
+      position.y + this.character.height * 0.62,
+      position.z + Math.cos(yaw) * 0.5
+    );
   }
 
   /**
@@ -954,6 +1322,27 @@ export class App {
           ? 'active'
           : settings.judgement.enabled
             ? 'ready'
+            : 'off',
+      // Lit for the whole of it — the gather, the descent and the ten seconds —
+      // because from the player's side those are one thing that is happening.
+      // The chip's *name* is what separates them: it counts the boon down and
+      // says nothing at all while the light is still on its way.
+      ascendance: airborne
+        ? 'off'
+        : this.ascendance.active
+          ? 'active'
+          : settings.ascendance.enabled
+            ? 'ready'
+            : 'off',
+      // And its opposite, on exactly the same rules: lit for the gather, the
+      // eruption and the seconds after, because from the player's side those
+      // are one thing that is happening.
+      shadowBoost: airborne
+        ? 'off'
+        : this.shadowBoost.active
+          ? 'active'
+          : settings.shadowBoost.enabled
+            ? 'ready'
             : 'off'
     };
 
@@ -966,6 +1355,17 @@ export class App {
     this.actionHUD.setLabel(
       'shoulder',
       this.gunplay.shoulder === 'left' ? 'Left shoulder' : 'Right shoulder'
+    );
+    // The third chip that names a value: how much of the boon is left. Rounded
+    // *up*, so it reads 1 for the whole of the last second and never spends a
+    // frame saying 0 while the light is still standing on the body.
+    const left = this.ascendance.remaining;
+    this.actionHUD.setLabel('ascendance', left > 0 ? `Ascendance ${Math.ceil(left)}s` : 'Ascendance');
+    // And the fourth, counting down the other boon on the same rule.
+    const dark = this.shadowBoost.remaining;
+    this.actionHUD.setLabel(
+      'shadowBoost',
+      dark > 0 ? `Shadow Boost ${Math.ceil(dark)}s` : 'Shadow Boost'
     );
 
     for (const move of this.character.attacks ?? []) {
@@ -1056,8 +1456,12 @@ export class App {
     // An attack knows the frame the blow lands and nothing else; what being hit
     // means is decided here. Each hands over its own settings block, so the
     // impact is the one the move was tuned with.
+    //
+    // A move that lands more than once also hands over the *beat* that fired,
+    // and the combo is the only one that does. Its two opening beats are thrown
+    // rather than landed, so they go somewhere else entirely — see `_onBeat`.
     for (const move of this.character.attacks) {
-      move.onHit = (enemy, x, z) => this._onStrike(enemy, x, z, move.config);
+      move.onHit = (enemy, x, z, beat) => this._onBeat(enemy, x, z, move.config, beat);
     }
     // Stood up now rather than on the first frame, so their materials are in
     // the scene for the shader warm-up below.
@@ -1202,6 +1606,11 @@ export class App {
     // body chasing a lens that was chasing it back.
     this.gunplay.aim(dt);
 
+    // Before the stick as well, and for a plainer reason: the boon's haste is a
+    // multiplier on the pace the stick asks for, so it has to be on the
+    // controller before the controller is asked for a frame of movement.
+    this._syncBoon();
+
     // Movement first: it sets the heading and the speed the blend animates to.
     // It only ever touches XZ; which is the whole reason the body can be dropped
     // onto the ground here without the controller knowing the ground exists.
@@ -1266,10 +1675,32 @@ export class App {
     // hit-stop it then hangs in, which is most of why the blow lands as hard as
     // it does.
     this.judgement.update(dt, this.elapsed);
+    // And the boon, which is the only one of them that is standing on the body:
+    // it is handed where the feet are every frame, so the column travels with
+    // the character rather than being left where it was cast. Deliberately not
+    // dismissed by taking off — flight excludes the abilities that are *cast*,
+    // and a boon already paid for should not be confiscated for leaving the
+    // ground. The shaft is tall enough that the body is still inside it.
+    this.ascendance.update(dt, this.elapsed, position, groundY, this.character.height);
+    // And the other boon, immediately after it and on the same clock, for every
+    // reason the line above gives: it stands on the body, it travels with it,
+    // and it is combat, so it slows with the hit-stop of the blows it is making
+    // heavier. The two are independent all the way down — the only place they
+    // meet is `_might`.
+    this.shadowBoost.update(dt, this.elapsed, position, groundY, this.character.height);
     // And the halo, last of the three: it hangs off the body's *final* position
     // for this frame, so the ring never lags a frame behind the character it is
     // supposed to be orbiting.
     this.blades.update(dt, this.elapsed, position, this.character.height);
+    // And the combo's cuts, on the same clock as everything else the player
+    // threw: a crescent still crossing the ground when the finisher lands slows
+    // with the hit-stop that finisher caused, which is the only way the three
+    // beats stay one move rather than becoming two that happen to overlap.
+    this.swordCombo.update(dt, this.elapsed);
+    // And the beam, on the same clock again — it *causes* the hit-stop it then
+    // stands in, and the body burning away inside it is on that clock too, so
+    // the two have to slow together or the column outlives what it was for.
+    this.runicBeam.update(dt, this.elapsed);
 
     // After everything that could have taken the body, so a chip lights on the
     // frame the move it names actually starts.
@@ -1313,7 +1744,11 @@ export class App {
     this.gunplay.dispose();
     this.shadows.dispose();
     this.judgement.dispose();
+    this.ascendance.dispose();
+    this.shadowBoost.dispose();
     this.blades.dispose();
+    this.swordCombo.dispose();
+    this.runicBeam.dispose();
     this.marking.dispose();
     this.judgeMarking.dispose();
     this.flightMarking.dispose();

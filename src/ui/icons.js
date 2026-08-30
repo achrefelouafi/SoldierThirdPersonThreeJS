@@ -123,6 +123,21 @@ export const ABILITY_ICONS = {
       `<path d="M2.6 6.6h4.6M3.8 9.6h3.2" stroke-width="1.4" opacity="0.45"/>`
   ),
 
+  // Two crescents already in the air and the star where the third one lands.
+  // The only glyph in the set that draws a move's *whole* sequence rather than
+  // its pose, because the sequence is what the move is: the pair of arcs are
+  // thrown, the burst is arrived at.
+  swordCombo: stroke(
+    `<path d="M2.4 9.2c3-2.8 6.6-3.2 9.4-1.2" stroke-width="2"/>` +
+      `<path d="M4.2 5.8c3-1.5 6-1.2 8.4.7" stroke-width="1.3" opacity="0.42"/>` +
+      `<path d="M2.2 17.4c3-2.8 6.6-3.2 9.4-1.2" stroke-width="2"/>` +
+      `<path d="M4 14c3-1.5 6-1.2 8.4.7" stroke-width="1.3" opacity="0.42"/>` +
+      `<circle cx="18" cy="12" r="2.5" fill="currentColor" stroke="none"/>` +
+      `<path d="M18 6.4v1.8M18 15.8v1.8M13.4 12h1.6M21 12h1.8M14.9 8.9l1.2 1.2` +
+      `M21.1 8.9l-1.2 1.2M14.9 15.1l1.2-1.2M21.1 15.1l-1.2-1.2" ` +
+      `stroke-width="1.3" opacity="0.66"/>`
+  ),
+
   // The body upside down mid-turn, the heel still out where it planted, and
   // the loop of the flip open behind it. The arrowhead is on the *back* of the
   // loop rather than the front: this is the one technique that leaves.
@@ -156,6 +171,34 @@ export const ABILITY_ICONS = {
       `<path d="M3.4 21.6 6 20.3M20.6 21.6 18 20.3" stroke-width="1.4" opacity="0.6"/>`
   ),
 
+  // The rune, and what came up out of it. Deliberately not the ascendance
+  // glyph turned a different colour, which is the trap with two pillars in one
+  // set: that one is a soft shaft standing in a flat disc with hoops round it,
+  // and this one is a *spike* rising out of a pointed sigil, wound by a single
+  // unbroken thread and throwing four-pointed shards. At 26px the difference
+  // that survives is the silhouette — a taper against a tube — so the taper is
+  // the whole drawing and everything else is a mark beside it.
+  voidBeam: stroke(
+    // The column: two walls closing as they rise, and the hot line between them.
+    `<path d="M9.6 1.4 8.6 14.6M14.4 1.4 15.4 14.6" stroke-width="1.3" opacity="0.55"/>` +
+      `<path d="M12 1.2v13.6" stroke-width="2.3"/>` +
+      // One thread wound round it, drawn as a single unbroken S so it reads as
+      // a helix rather than as a stack of rings.
+      `<path d="M7.6 11.8c3-1.4 3.4-3.6 1-4.8-2.4-1.2-1.4-3.4 1.8-4.4" ` +
+      `stroke-width="1.3" opacity="0.85"/>` +
+      `<path d="M16.4 11.8c-3-1.4-3.4-3.6-1-4.8 2.4-1.2 1.4-3.4-1.8-4.4" ` +
+      `stroke-width="1.2" opacity="0.4"/>` +
+      // The sigil it stands in: pointed, not a plain disc.
+      `<path d="M12 12.9c5 0 9 1.6 9 3.4s-4 3.4-9 3.4-9-1.6-9-3.4 4-3.4 9-3.4z"/>` +
+      `<path d="M12 14.9c2.3 0 4.2.6 4.2 1.4s-1.9 1.4-4.2 1.4-4.2-.6-4.2-1.4 1.9-1.4 4.2-1.4z" ` +
+      `stroke-dasharray="1.7 1.7" opacity="0.5"/>` +
+      // And the shards it is shedding — four-pointed, because that is what they
+      // are, and scattered off-centre because a symmetric pair reads as ears.
+      `<path d="M3.9 10.4 4.6 11.6 3.9 12.8 3.2 11.6z" fill="currentColor" stroke="none" opacity="0.85"/>` +
+      `<path d="M20.2 7.6 20.8 8.6 20.2 9.6 19.6 8.6z" fill="currentColor" stroke="none" opacity="0.6"/>` +
+      `<path d="M5.6 5.4 6.1 6.2 5.6 7 5.1 6.2z" fill="currentColor" stroke="none" opacity="0.45"/>`
+  ),
+
   // A body off the ground with the ring of blades around it. The figure is
   // filled and the swords are outlines, because the halo is the part that has
   // to read at 26px — a filled sword at this size is a smudge, and three
@@ -175,6 +218,68 @@ export const ABILITY_ICONS = {
       `<path d="M10.4 17.9 8 21.4M13.6 17.9 16 21.4" stroke-width="1.6"/>` +
       // And the air under it.
       `<path d="M5.4 20.4h2.2M16.4 20.4h2.2" stroke-width="1.3" opacity="0.45"/>`
+  ),
+
+  // The column, wound, standing in its own circle. The only glyph in the set
+  // with nothing being *done* to anybody in it, which is the point: the shaft
+  // runs out of the top of the frame because the light comes from further up
+  // than the box, and the two rings around it are the ribbons — front halves
+  // solid, back halves faint, which is the cheapest way to draw a helix at this
+  // size without it reading as a stack of hoops.
+  ascendance: stroke(
+    // The shaft: its walls, and the hot line down the middle of it.
+    `<path d="M9.2 1.4 8.2 15.6M14.8 1.4 15.8 15.6" stroke-width="1.4" opacity="0.7"/>` +
+      `<path d="M12 1.4v14.4" stroke-width="2.1"/>` +
+      // The ribbons.
+      `<path d="M7.9 7.4c2.4 2.3 5.8 2.3 8.2 0" stroke-width="1.4" opacity="0.9"/>` +
+      `<path d="M7.9 7.4c2.4-1.9 5.8-1.9 8.2 0" stroke-width="1.2" opacity="0.32"/>` +
+      `<path d="M7.4 12.4c2.6 2.4 6.2 2.4 8.8 0" stroke-width="1.4" opacity="0.9"/>` +
+      `<path d="M7.4 12.4c2.6-2 6.2-2 8.8 0" stroke-width="1.2" opacity="0.32"/>` +
+      // The sigil it is standing in.
+      `<ellipse cx="12" cy="18.4" rx="8.3" ry="2.8"/>` +
+      `<ellipse cx="12" cy="18.4" rx="4.4" ry="1.4" stroke-dasharray="1.8 1.8" opacity="0.5"/>` +
+      // And the embers coming off it — diamonds, because that is what they are.
+      `<path d="M3.6 12.4 4.5 13.6 3.6 14.8 2.7 13.6z" fill="currentColor" stroke="none" opacity="0.8"/>` +
+      `<path d="M20.6 9.4 21.4 10.5 20.6 11.6 19.8 10.5z" fill="currentColor" stroke="none" opacity="0.62"/>` +
+      `<path d="M19.6 14.6 20.2 15.4 19.6 16.2 19 15.4z" fill="currentColor" stroke="none" opacity="0.45"/>`
+  ),
+
+  // The other column, and the trap this glyph exists to avoid: at 26px a shaft
+  // in a circle is a shaft in a circle, so if this were drawn like the one
+  // above the two chips would be one icon in two colours. Three things separate
+  // them, and all three are the ability itself read backwards. The light's
+  // shaft leaves the top of the frame because it came from further up than the
+  // box; this one *ends inside it*, ragged, because it came from under the
+  // feet. Its foot flares where the light's is parallel. And where that one is
+  // wound by clean hoops, this is wrapped in smoke — open curls that do not
+  // close, with torn puffs coming off them.
+  shadowBoost: stroke(
+    // The pool it is standing in, filled: the only glyph in the set with a
+    // solid ground under it, because the base glow is the layer everything else
+    // in the effect is seen against.
+    `<ellipse cx="12" cy="19" rx="8.4" ry="2.9" fill="currentColor" stroke="none" opacity="0.2"/>` +
+      `<ellipse cx="12" cy="19" rx="8.4" ry="2.9" opacity="0.85"/>` +
+      `<ellipse cx="12" cy="19" rx="4.6" ry="1.5" stroke-dasharray="1.8 1.8" opacity="0.5"/>` +
+      // The column: walls that flare where they leave the ground and close as
+      // they rise, and the dark line between them stopping short of the top.
+      `<path d="M8.6 18.4c-.5-4.6-.2-8.4 1.1-12.2" stroke-width="1.4" opacity="0.75"/>` +
+      `<path d="M15.4 18.4c.5-4.6.2-8.4-1.1-12.2" stroke-width="1.4" opacity="0.75"/>` +
+      `<path d="M12 18.2V5.6" stroke-width="2.2"/>` +
+      // And the ragged head of it — two short strokes fraying off the top,
+      // which is the whole of what says this one ends where you can see it.
+      `<path d="M12 5.6 10.6 2.6M12 5.6l1.6-2.4" stroke-width="1.3" opacity="0.6"/>` +
+      // The wisps, wrapped round it. Open curls rather than closed hoops: the
+      // difference between smoke and a spring at this size is whether the ends
+      // meet.
+      `<path d="M7.2 16.4c2.6-1.4 2.4-3.6.3-5 -2.1-1.4-1.4-3.4 1.3-4.4" ` +
+      `stroke-width="1.3" opacity="0.9"/>` +
+      `<path d="M16.8 16.4c-2.6-1.4-2.4-3.6-.3-5 2.1-1.4 1.4-3.4-1.3-4.4" ` +
+      `stroke-width="1.2" opacity="0.5"/>` +
+      // And the torn shadow coming off them — round and soft, because a puff of
+      // smoke is the one thing in this set that must not have corners.
+      `<circle cx="4" cy="12.6" r="1.5" fill="currentColor" stroke="none" opacity="0.8"/>` +
+      `<circle cx="20.2" cy="9.6" r="1.2" fill="currentColor" stroke="none" opacity="0.55"/>` +
+      `<circle cx="5.9" cy="7.6" r="0.9" fill="currentColor" stroke="none" opacity="0.4"/>`
   )
 };
 

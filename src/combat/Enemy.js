@@ -212,6 +212,17 @@ export class Enemy {
     /** 0 while the body is whole, 1 when it has burned away. */
     this.dissolve = 0;
     /**
+     * How this body goes away, if what killed it had an opinion — the `unmake`
+     * block off the striking move (`settings.voidBeam.unmake`), or null.
+     *
+     * A fact about the *blow*, in exactly the way `slices` is: the beam does
+     * not damage a body, it unmakes one, and a corpse it left lying in the
+     * grass for five seconds in ember orange would say the opposite. Null for
+     * every other move in the game, which is the ordinary path unchanged.
+     * @type {object|null}
+     */
+    this._unmade = null;
+    /**
      * What is left of it, in the units `settings.gunplay.damage` is written in.
      *
      * Only the gun spends it. Every melee blow in the project is a *kill* — a
@@ -373,8 +384,10 @@ export class Enemy {
     if (this.sliced && this.state === 'dead') this._bleed(dt);
 
     const config = settings.enemies;
+    // Whatever killed it may have said how long it gets, and one thing does.
+    const unmade = this._unmade;
     if (this.state === 'dead') {
-      if (this.timer >= config.corpseTime) {
+      if (this.timer >= (unmade?.corpseTime ?? config.corpseTime)) {
         this.state = 'dissolving';
         this.timer = 0;
         // The depth pass has no idea the body is being burned away, so it would
@@ -385,7 +398,10 @@ export class Enemy {
       return;
     }
 
-    this.dissolve = Math.min(1, this.timer / Math.max(0.05, config.dissolveTime));
+    this.dissolve = Math.min(
+      1,
+      this.timer / Math.max(0.05, unmade?.dissolveTime ?? config.dissolveTime)
+    );
     for (const part of this.parts) part.uniforms.uDissolve.value = this.dissolve;
     if (this.dissolve >= 1) this.state = 'gone';
   }
@@ -441,7 +457,7 @@ export class Enemy {
    *
    * @param {number} x unit direction of the blow
    * @param {number} z
-   * @param {{impulse: number, lift: number, spin: number}} force
+   * @param {{impulse: number, lift: number, spin: number, unmake?: object}} force
    * @param {boolean} [slice] whether the blow came down with an edge on it
    * @returns {boolean} false if it was already down
    */
@@ -450,6 +466,9 @@ export class Enemy {
 
     this.state = 'dead';
     this.timer = 0;
+    // Taken once, here, and never re-read: what killed it cannot change its
+    // mind halfway through the burn. Null for every move but the beam.
+    this._unmade = force?.unmake ?? null;
     // Nothing fades. The pose the clip is on *is* the ragdoll's first frame —
     // so the skeleton is brought fully up to date, ancestors included, before
     // it is read: the solver works in world space and every rest length it
@@ -902,6 +921,12 @@ if (uCutSide != 0.0 && (dot(vEnemyBind, uCutNormal) - uCutOffset) * uCutSide < 0
         ? (this._flinch / Math.max(0.01, wound.flinch)) * wound.flinchRim
         : 0;
 
+    // The burn edge belongs to whatever is doing the burning. Ordinarily that
+    // is the stage's own slow ember, and the block below is `look` itself; for
+    // a body inside the void beam it is the beam's violet, and every field it
+    // does not state falls back to the ember it replaces.
+    const burn = this._unmade ?? look;
+
     for (const part of this.parts) {
       const u = part.uniforms;
 
@@ -914,10 +939,10 @@ if (uCutSide != 0.0 && (dot(vEnemyBind, uCutNormal) - uCutOffset) * uCutSide < 0
       copyColor(u.uRimColor.value, look.rimColor);
       u.uRimPower.value = look.rimPower;
       u.uRimEmissive.value = look.rimEmissive + flare;
-      copyColor(u.uEdgeColor.value, look.edgeColor);
-      u.uEdgeEmissive.value = look.edgeEmissive;
-      u.uEdgeWidth.value = look.edgeWidth;
-      u.uRise.value = look.dissolveRise;
+      copyColor(u.uEdgeColor.value, burn.edgeColor ?? look.edgeColor);
+      u.uEdgeEmissive.value = burn.edgeEmissive ?? look.edgeEmissive;
+      u.uEdgeWidth.value = burn.edgeWidth ?? look.edgeWidth;
+      u.uRise.value = burn.dissolveRise ?? look.dissolveRise;
       u.uNoiseScale.value = look.dissolveDetail * this._bindScale;
 
       // The cut's own look, so the meat and the hot line stay editable while a
