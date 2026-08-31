@@ -8,7 +8,7 @@ equipment studio to dress the body in.
 No engine, no physics library, no asset pipeline. Three.js, Vite, and one file
 of settings that everything reads every frame.
 
-![The stage](docs/media/hero.jpg)
+![The stage](docs/media/stage.jpg)
 
 ```bash
 npm install
@@ -65,7 +65,7 @@ frame.
 
 ## The world
 
-![Night](docs/media/night.jpg)
+![Night](docs/media/world.jpg)
 
 One height field, one sky, one body of air, and nothing on screen is allowed to
 disagree with any of them.
@@ -117,7 +117,7 @@ redialled while walking over it:
 
 | `amplitude: 0` | `amplitude: 3.4` (shipped) | `amplitude: 15, ridge: 0.85` |
 | --- | --- | --- |
-| ![Flat](docs/media/terrain-flat.jpg) | ![Rolling](docs/media/terrain-rolling.jpg) | ![Peaks](docs/media/terrain-peaks.jpg) |
+| ![Flat](docs/media/terrain-plain.jpg) | ![Rolling](docs/media/terrain-hills.jpg) | ![Peaks](docs/media/terrain-mountains.jpg) |
 
 The two exceptions are `seed` (reshuffles the table) and `segments` (rebuilds the
 floor grid). `octaves` is the real cost dial. Amplitude 0 collapses the whole
@@ -127,7 +127,7 @@ thing back to a flat plane at y = 0, for free.
 
 ## The character
 
-![The soldier](docs/media/blade.jpg)
+![The soldier](docs/media/soldier.jpg)
 
 An armoured soldier who fights with a katana in one loadout and a rifle in the
 other. The body and its motion live in different files.
@@ -182,7 +182,7 @@ would plant the legs while the body travels on.
 
 ### Who a press would land on
 
-![Target locks](docs/media/targeting.jpg)
+![Target locks](docs/media/target-rings.jpg)
 
 A body wears a ring because a key would take it — not because it happens to be
 standing inside some cone alongside three others the swing will never reach. The
@@ -237,7 +237,7 @@ the slash's a longer freeze and a body in two pieces.
 
 ### The ragdoll
 
-![Ragdoll](docs/media/ragdoll.jpg)
+![Ragdoll](docs/media/ragdoll-death.jpg)
 
 [Ragdoll](src/combat/Ragdoll.js) adds no physics engine, because a ragdoll does
 not need one. What the eye reads as a body falling is bone lengths that never
@@ -400,7 +400,7 @@ silently did nothing would read as a dropped key.
 
 ## The equipment studio — `Tab`
 
-![The studio](docs/media/studio.jpg)
+![The studio](docs/media/equipment-studio.jpg)
 
 `Tab` moves the body out of the play scene and onto a set built for one thing:
 looking at it and dressing it. It is a *mode*, not a scene-graph trick — entering
@@ -416,7 +416,7 @@ tuned here already correct out in the world.
 | The mode | [src/screens/CharacterScreen.js](src/screens/CharacterScreen.js) | Owns the switch: which scene the post stack draws, which camera, which grade block, and which update path runs. |
 | Panel | [src/ui/CharacterScreenUI.js](src/ui/CharacterScreenUI.js) | Plain DOM. Holds no state: every value is re-read from the manager, so the gizmo and the number boxes can never disagree. |
 
-![Skeleton overlay](docs/media/studio-skeleton.jpg)
+![Skeleton overlay](docs/media/equipment-studio-skeleton.jpg)
 
 Tuning a placement: pick a category, click an item to equip it, then set the
 joint and nudge the offset. The `Move`/`Rotate` gizmo in the viewport writes the
@@ -487,7 +487,7 @@ the plain joint. Anything parented to one rides the skeleton for free.
 
 ## The editor — `G`
 
-![The editor](docs/media/editor.jpg)
+![The editor](docs/media/stage-editor.jpg)
 
 Every tweakable number in the project lives in
 [src/config/settings.js](src/config/settings.js), and
