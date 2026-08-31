@@ -21,9 +21,12 @@ const RESCAN = 0.5;
  * teleport with a smear on it rather than as something that moved.
  *
  * So for those four tenths it is not that body. The skin burns away into a
- * shade of itself — one dark surface and a violet rim, so the silhouette still
- * reads against a night stage — and burns back out of it on the frame the feet
- * land on the mark. The finisher lands on a body that is still coming
+ * shade of itself — a dark surface the stage shows *through*, held together by
+ * a violet rim, so the silhouette still reads against a night stage — and burns
+ * back out of it on the frame the feet land on the mark. The one fresnel term
+ * pays for both halves of that: it lights the rim and it decides how much of
+ * the world comes through, so the body is thinnest square-on and solid at the
+ * edges, which is where a silhouette actually lives. The finisher lands on a body that is still coming
  * back, which is where it should land: the blow is what puts the character
  * back in the world.
  *
@@ -89,6 +92,11 @@ export class ShadowDash {
       uDashRimColor: { value: makeColor('#7a4dff') },
       uDashRimPower: { value: 2.4 },
       uDashRimEmissive: { value: 2.2 },
+
+      /** The veil: how solid the shade is square-on, at the rim, and the curve between. */
+      uDashCoreAlpha: { value: 0.16 },
+      uDashRimAlpha: { value: 0.92 },
+      uDashAlphaPower: { value: 1.6 },
       // The frame's exposure, by identity — the emissives divide themselves by
       // it so the colours survive the trip between the two stages' grades.
       uDashExposure: frame.uExposure,
@@ -221,6 +229,11 @@ export class ShadowDash {
     u.uDashRimPower.value = config.fresnel.power;
     u.uDashRimEmissive.value = config.fresnel.emissive;
 
+    const veil = config.veil;
+    u.uDashCoreAlpha.value = MathUtils.clamp(veil.core, 0, 1);
+    u.uDashRimAlpha.value = MathUtils.clamp(veil.rim, 0, 1);
+    u.uDashAlphaPower.value = Math.max(0.05, veil.power);
+
     u.uDashDetail.value = config.detail;
     u.uDashHeight.value = Math.max(1e-3, this.character.height);
     u.uDashRise.value = config.rise;
@@ -276,13 +289,28 @@ export class ShadowDash {
     });
   }
 
-  /** One material, able to go to shadow and back. */
+  /**
+   * One material, able to go to shadow and back.
+   *
+   * The `transparent` flag is set here, once, and never taken off again. It has
+   * to be set *somewhere* — three writes `gl_FragColor.a = 1.0` into any shader
+   * it believes is opaque, so an alpha the patch computes would be thrown away
+   * — and setting it per dash would mean a flag change on a dozen materials on
+   * the frame the move fires, which is a shader recompile at the worst moment
+   * in the move. Left on, it costs nothing: outside the dash `uDashShift` is 0,
+   * the branch is not taken and the alpha is still exactly 1.
+   *
+   * `depthWrite` is deliberately left alone — the body keeps writing depth, so
+   * the veil shows the *stage* through the character and never the inside of
+   * its own skull.
+   */
   _patch(material) {
     patchOnBeforeCompile(material, (shader) => {
       Object.assign(shader.uniforms, this.uniforms);
       shader.vertexShader = DASH_VERTEX_PATCH(shader.vertexShader);
       shader.fragmentShader = DASH_FRAGMENT_PATCH(shader.fragmentShader);
     });
+    material.transparent = true;
     material.needsUpdate = true;
   }
 }
@@ -351,9 +379,15 @@ vDashBody = (uDashInverse * modelMatrix * vec4(transformed, 1.0)).xyz;`
  * pure height as a wipe, and the value between them is what looks like a body
  * coming apart. The band is widened by `uDashEdgeWidth` at both ends so the
  * shift still reaches a *fully* authored body at 0 and a fully dark one at 1
- * with a soft front in between. No `discard` anywhere: the body is opaque the
- * whole way through, so nothing about it has to be sorted against the mist it
- * is standing in.
+ * with a soft front in between.
+ *
+ * ## The veil
+ *
+ * The shaded fragments thin out rather than going black — see `_patch` for the
+ * flag that costs, and the emissive block below for the division that keeps the
+ * rim alive through it. Still no `discard` anywhere: the alpha is a smooth
+ * field over a body that goes on writing depth, so nothing about it has to be
+ * sorted against itself, and outside the dash it is 1 everywhere.
  */
 const DASH_FRAGMENT_PATCH = (source) => {
   const head = /* glsl */ `
@@ -364,6 +398,9 @@ uniform float uDashMetalness;
 uniform vec3 uDashRimColor;
 uniform float uDashRimPower;
 uniform float uDashRimEmissive;
+uniform float uDashCoreAlpha;
+uniform float uDashRimAlpha;
+uniform float uDashAlphaPower;
 uniform float uDashExposure;
 uniform float uDashDetail;
 uniform float uDashHeight;
@@ -437,12 +474,30 @@ if (uDashShift > 0.0) {
   // hole in the screen. Fading it in with the shade rather than with the shift
   // keeps it off the half of the body that is still skin.
   float facing = clamp(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
-  totalEmissiveRadiance +=
-    uDashRimColor * pow(facing, max(uDashRimPower, 0.05))
-    * (uDashRimEmissive * dashShade / max(uDashExposure, 0.01));
+
+  // The veil, off the same term: square-on is nearly gone, the rim is nearly
+  // solid, and the burning front is solid whatever the numbers say — an edge
+  // you can see through is not an edge. Only the shaded fraction thins, so the
+  // half of the body that is still skin stays as opaque as it was authored.
+  float veil = mix(uDashCoreAlpha, uDashRimAlpha, pow(facing, uDashAlphaPower));
+  veil = clamp(max(veil, dashFront), 0.0, 1.0);
+  float alpha = mix(diffuseColor.a, min(diffuseColor.a, veil), dashShade);
+
+  // Everything below is emitted *through* that veil — the blend multiplies it
+  // by the alpha on the way out — so it is pre-divided by it. Without this the
+  // rim goes out exactly where the body gets thinnest, which is the one place
+  // it is holding the silhouette together. Floored, so a near-invisible core
+  // cannot turn a small emissive into an arc light.
+  float through = max(uDashExposure, 0.01) * max(alpha, 0.15);
 
   totalEmissiveRadiance +=
-    uDashEdgeColor * dashFront * (uDashEdgeEmissive / max(uDashExposure, 0.01));
+    uDashRimColor * pow(facing, max(uDashRimPower, 0.05))
+    * (uDashRimEmissive * dashShade / through);
+
+  totalEmissiveRadiance +=
+    uDashEdgeColor * dashFront * (uDashEdgeEmissive / through);
+
+  diffuseColor.a = alpha;
 }
 `;
 

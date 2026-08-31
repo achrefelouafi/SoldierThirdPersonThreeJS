@@ -1690,6 +1690,30 @@ export const settings = {
       },
 
       /**
+       * How much of the world comes *through* the shade, by facing.
+       *
+       * The same fresnel term the rim is drawn with, spent twice: where the
+       * surface turns away from the lens it is nearly solid (`rim`), and where
+       * it faces the lens square it is mostly gone (`core`). That is what makes
+       * the shade read as a body-shaped absence of a body rather than as a
+       * black cut-out — the silhouette holds, the middle of the chest does not,
+       * and the stage behind it stays visible the whole way across the dash.
+       *
+       * `power` is the exponent between the two, and it is the control that
+       * matters: low and the whole body is glass, high and only the outline is
+       * left. It is stated apart from `fresnel.power` on purpose — the rim's
+       * light wants a tight edge and the veil wants a wide one.
+       *
+       * Whatever the numbers, the burning front stays solid: a line of light
+       * you can see through has nothing to be the edge *of*.
+       */
+      veil: {
+        core: 0.16,
+        rim: 0.92,
+        power: 1.6
+      },
+
+      /**
        * The line of light riding the front, in both directions.
        *
        * Brighter and wider than the summons' vanish, because this one has to be

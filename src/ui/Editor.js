@@ -1761,6 +1761,12 @@ export class Editor {
     R(dash, d, 'metalness', 0, 1, 0.01, 'metalness');
     R(dash, d.fresnel, 'power', 0.2, 8, 0.05, 'rim tightness');
     R(dash, d.fresnel, 'emissive', 0, 8, 0.01, 'rim emissive');
+    // How much of the stage comes through the shade. `see-through curve` is the
+    // one worth dragging: it is the exponent between the two solidities, and it
+    // is the difference between a body of glass and a bare outline.
+    R(dash, d.veil, 'core', 0, 1, 0.01, 'solid, square-on');
+    R(dash, d.veil, 'rim', 0, 1, 0.01, 'solid, at the rim');
+    R(dash, d.veil, 'power', 0.2, 6, 0.05, 'see-through curve');
     R(dash, d, 'edgeEmissive', 0, 20, 0.1, 'burn emissive');
     R(dash, d, 'edgeWidth', 0.01, 0.5, 0.005, 'burn width');
     dash.addColor(d, 'color').name('shade colour');
