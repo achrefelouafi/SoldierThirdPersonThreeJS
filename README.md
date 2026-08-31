@@ -1,8 +1,9 @@
 # Samurai — a third-person Three.js template
 
-A complete third-person action stage in the browser: a rigged samurai on an
-endless procedural night landscape, with locomotion, motion-warped melee,
-ragdoll deaths and an equipment studio to dress the body in.
+A complete third-person action stage in the browser: a rigged fighter on an
+endless procedural night landscape, with locomotion, motion-warped melee, four
+thrown abilities, two boons, a shoulder-camera shooter, ragdoll deaths and an
+equipment studio to dress the body in.
 
 No engine, no physics library, no asset pipeline. Three.js, Vite, and one file
 of settings that everything reads every frame.
@@ -24,6 +25,9 @@ npm run build
 | `E` · `R` · `T` · `Q` | Kick · Slash Hit · Slide Cut · Flip Kick. |
 | `Z` | Sword Combo — throws two cuts across the ground at a body up to eleven metres off, then closes and takes it apart. |
 | `B` | Unmaking — strikes twice at the nearest body: a rune into the ground under it, then a column of void up through it. Nothing is left to fall. |
+| `V` | Crimson Rite — marks the nearest body and calls three katanas up out of the dark around it. They go in one after another and come out together. |
+| `C` | Shadow Execution — five katanas circle the mark, closing, and then go in all at once. What they come out of does not fall over, it comes apart. |
+| `N` · `M` | Ascendance · Shadow Boost — the two boons. Called down on yourself rather than thrown at anybody, and carried for ten seconds. |
 | `1` | Swap the weapon. The katana burns away and the rifle burns in, or the other way round. |
 | `Tab` | The equipment studio. |
 | click · mouse | Take the pointer, then move the mouse to turn the view. |
@@ -41,6 +45,8 @@ things in.
 
 **With the rifle drawn**, the whole stage becomes a shooter — the lens steps
 onto a shoulder, a reticle comes up, and the torso points at whatever it is on.
+
+![Down the sights](docs/media/rifle.jpg)
 
 | | |
 | --- | --- |
@@ -182,12 +188,14 @@ standing inside some cone alongside three others the swing will never reach. The
 question is asked one move at a time, and it is that move's *own* question:
 `findTarget` with its range and its cone, which is the exact call
 `ThirdPersonController` makes on the press. Two rings can come up at once, and
-when they do they are telling the truth: the kick and the slash have locked
-different bodies, and the caps over each head say which key goes where.
+when they do they are telling the truth: in the shot above the kick and the flip
+kick have locked the body beside you and the slide cut — the only one of them
+long enough to reach — has locked the one out in front, which is why three
+plates are lit and the slash hit is not.
 
-One answer feeds three things — the cap over the head, the plate along the
-bottom, and the press itself — so a plate can never light over a body no key
-would reach.
+One answer feeds two things — the ring on the ground and the plates along the
+bottom — and the press itself is that same call one line earlier in the frame,
+so a plate can never light over a body no key would reach.
 
 ### Aiming an animation that was authored for someone else
 
@@ -279,6 +287,113 @@ ground mist never has to be sorted against it.
 The export carries no textures at all, so the look is authored rather than
 imported: a cold near-black body with an ember fresnel rim, which is the one
 combination that stays legible against a blue night at twenty metres.
+
+---
+
+## The abilities
+
+Four of them, and what makes each an *ability* rather than a technique is what
+it calls on, not how it is aimed: every one is locked exactly as a kick is —
+`findTarget` with its own range and its own cone, on the frame the key goes
+down — and then runs on a clock of its own long after the clip that started it
+has stopped.
+
+That split is the whole shape of these moves. The clip is responsible for two
+beats and nothing more, and it names them itself: `hits` entries in
+[src/config/settings.js](src/config/settings.js), each with a normalised time
+and a `kind`. `App#_onBeat` branches on that `kind` rather than on the move's
+identity, so a fifth multi-beat move would only have to describe its beats to
+get the same treatment — nothing in `App` knows any of these by name. The first
+beat of each of them is the same thing: a promise that costs the body nothing.
+The second lets the effect go, and from there the move reports its own contacts
+back through its own callbacks.
+
+They all also share the beat of contact with the techniques — the ragdoll, the
+hit-stop and the shake, read off the move that landed — so a body taken apart by
+the execution goes down with the same weight as one that took a kick.
+
+### Sword Combo — `Z`
+
+| The cuts cross the ground | The finisher closes |
+| --- | --- |
+| ![A thrown cut](docs/media/sword-combo-wave.jpg) | ![The finisher](docs/media/sword-combo.jpg) |
+
+The longest reach of them and the longest you are committed for. Two cuts are
+*thrown* — they leave the blade and travel, and what they do happens when they
+arrive rather than on the frame the sweep played — and then the body itself
+follows, ten metres in about four tenths of a second. For those four tenths it
+is not lit skin: [ShadowDash](src/vfx/ShadowDash.js) patches the materials the
+body is *already* wearing into a shade the stage shows through, held together by
+a violet rim, and burns them back on the frame the feet land. So the finisher
+lands on a body still coming back, which is where it should land — the blow is
+what puts the character back in the world. The rift opens *before* the kill, so
+it is centred on a body still standing on its own feet rather than on a ragdoll
+already sliding out of it.
+
+### Unmaking — `B`
+
+| The rune is written | The column comes up through it |
+| --- | --- |
+| ![The rune](docs/media/unmaking-rune.jpg) | ![The column](docs/media/unmaking.jpg) |
+
+Two strikes from where you stand, and the move the other three took their shape
+from. The first beat opens a rune in the ground under the body and stops, and
+the pause is the point: the blow that follows has been promised, so it reads as
+inevitable rather than sudden. The second brings the column up
+through the mark ([RunicBeam](src/vfx/RunicBeam.js)), and what is inside it
+burns away on the same clock the column is on, which is why there is nothing
+left to fall.
+
+### Crimson Rite — `V`
+
+| Three katanas go in | And come out together |
+| --- | --- |
+| ![The blades](docs/media/crimson-rite-blades.jpg) | ![The tear-out](docs/media/crimson-rite.jpg) |
+
+The mark, then the summon. Three blades come up out of the ground around the
+body and go in one after another — each reporting its own contact as it lands,
+so the wound is spent three times rather than once — and then they come out
+together and the ground opens where they were. The caster is handed the stick
+back two thirds of the way through the clip, well before any of that: the rite
+does not need them once it has been let go, and a character rooted for the whole
+of something they are only watching is the commonest way a move this long stops
+being fun.
+
+### Shadow Execution — `C`
+
+| Five circle the mark, closing | And go in at once |
+| --- | --- |
+| ![The ring](docs/media/shadow-execution-ring.jpg) | ![The strike](docs/media/shadow-execution.jpg) |
+
+The same two beats and the same discipline, thrown harder. Five katanas take a
+ring around the mark and turn, tightening, and where the rite's blades arrive one
+at a time these arrive *together* — one frame with five contacts on it, which is
+a different kind of blow and is tuned as one. Then the hold, and the tear-out.
+What comes out of it does not fall over: it comes apart.
+
+## The boons — `N` and `M`
+
+| Ascendance | Shadow Boost |
+| --- | --- |
+| ![Ascendance](docs/media/ascendance.jpg) | ![Shadow Boost](docs/media/shadow-boost.jpg) |
+
+The two moves with nowhere to point them. Both are cast on the ground you are
+standing on, both last ten seconds, and what they change is the body throwing
+them: the light is the quicker of the two (`haste` 1.38, `might` 1.55) and the
+dark is the heavier (1.12 and 1.75). They are independent all the way down, and
+the only places they meet at all are the two lines that fold them into the pace
+and the blow — where a player holding both gets the product rather than the
+louder of the two.
+
+Being carried rather than thrown is what earns them a panel of their own in the
+HUD: while one is up its chip *is* the countdown, so a player asking "how long
+have I got" reads one place. Both are also chips a click can mean, which is a
+thing only a move with nothing to aim can be: a button cannot say where.
+
+Neither will go out while the feet are off the ground. The refusal lives in
+`App#_groundedOnly` rather than in either cast, because it is the same question
+asked twice, and it costs a line of text rather than nothing: a press that
+silently did nothing would read as a dropped key.
 
 ---
 
@@ -423,8 +538,10 @@ Frame rate, average and peak frame time, draw calls and triangles, averaged over
 half-second window. The counters are sampled at the top of the *next* frame, where
 a frame ends for certain, rather than at each of the several places one can end.
 
-The numbers above are a full stage — terrain, litter, drift, mist, five enemies
-and the whole post chain — in about 66 draw calls.
+The numbers above came off a real run of a full stage — terrain, litter, drift,
+mist, five enemies and the whole post chain. It sits in the high seventies of
+draw calls as the stage now stands, and crosses a hundred only while one of the
+abilities is on screen.
 
 ---
 
@@ -460,7 +577,7 @@ src/
   world/         terrain, floor, sky, moon, air, ground fog, leaves, lighting, the studio set
   animation/     character rig, retargeting, locomotion, jump, attacks
   combat/        enemies, ragdoll, gunplay
-  vfx/           the sword combo, boons, the void beam, markers, blood
+  vfx/           the combo, the unmaking, the rite, the execution, the boons, rings, blood
   equipment/     catalog, lazy library, mount manager
   screens/       the character screen and its camera
   postprocessing/ bloom, tone map, grade
@@ -476,7 +593,12 @@ src/
 
 ## Credits
 
-- **Character model** — [dark_igorek](https://sketchfab.com/dark_igorek) on Sketchfab
+Everything above is lighting and code wrapped around someone else's sculpt, and
+it is worth saying which is which.
+
+- **Character model** — by [Barcelo](https://sketchfab.com/Barcelo) on Sketchfab.
+  The body, the armour and the maps the whole material library is resolved
+  against are all theirs; the studio in `Tab` exists to look at that work.
 - **Animations** — [Mixamo](https://mixamo.com)
 - **Textures** — [ambientCG](https://ambientcg.com)
 - **HDRI** — [Poly Haven](https://polyhaven.com)
