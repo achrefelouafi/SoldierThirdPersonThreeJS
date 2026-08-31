@@ -3240,7 +3240,7 @@ export const settings = {
      * gestures below, so the move cannot come apart into three looks.
      */
     trails: {
-      enabled: true,
+      enabled: false,
       /** The white heat, the body of it, and the dark it fades into. */
       coreColor: '#f3ebff',
       color: '#9a5cff',
