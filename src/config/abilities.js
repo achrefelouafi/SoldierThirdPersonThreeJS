@@ -197,6 +197,21 @@ export const ABILITIES = [
     attack: true
   },
   {
+    id: 'shadowExecution',
+    category: 'ability',
+    label: 'Shadow Execution',
+    // The last free cap on the row the other two casts already hold. B and V
+    // are taken; C finishes the run, and a hand that has found either of them
+    // has found this one.
+    hotkey: 'C',
+    code: 'KeyC',
+    note:
+      'Mark the nearest body and call five katanas up out of the dark around it. ' +
+      'They circle it, closing, and then go in all at once — and what they come ' +
+      'out of does not fall over, it comes apart.',
+    attack: true
+  },
+  {
     id: 'ascendance',
     category: 'buff',
     // Rewritten each frame while the boon is up with the seconds left on it,

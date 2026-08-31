@@ -189,6 +189,42 @@ export const ABILITY_ICONS = {
       `stroke-dasharray="1.4 3.2" opacity="0.28"/>`
   ),
 
+  // Five blades on a ring, and the ring is turning.
+  //
+  // This sits beside `crimsonRite` in the same panel, and the two moves are
+  // close enough in words — "katanas called up around a body" — that the glyphs
+  // have to carry the difference on their own. They do it with the two things
+  // that actually separate the moves. **Count**: three arrowheads against five
+  // shafts, and five is past where the eye counts and into where it reads a
+  // ring. **Gesture**: the rite's blades point *at* the middle, so its glyph is
+  // a convergence; these are slewed off the radius into a pinwheel, which is
+  // the one arrangement that reads as rotation at 26px with no arrow drawn.
+  //
+  // Everything else is subordinate to those two: the orbit is a faint dashed
+  // circle, the guards are the marks that say the shafts are blades rather than
+  // spokes, and the middle is a point because that is what five of them are
+  // aimed at.
+  shadowExecution: stroke(
+    // The five, each a shaft from the ring inward, turned 25° off the radius.
+    `<path d="M12 3.6 13.44 8.92" stroke-width="1.8"/>` +
+      `<path d="M11.53 5.1 13.17 4.66" stroke-width="1.2" opacity="0.65"/>` +
+      `<path d="M19.99 9.4 15.38 12.41" stroke-width="1.8"/>` +
+      `<path d="M18.42 9.41 19.34 10.83" stroke-width="1.2" opacity="0.65"/>` +
+      `<path d="M16.94 18.8 12.65 15.34" stroke-width="1.8"/>` +
+      `<path d="M16.44 17.31 15.38 18.63" stroke-width="1.2" opacity="0.65"/>` +
+      `<path d="M7.06 18.8 9.03 13.65" stroke-width="1.8"/>` +
+      `<path d="M8.32 17.86 6.74 17.26" stroke-width="1.2" opacity="0.65"/>` +
+      `<path d="M4.01 9.4 9.51 9.68" stroke-width="1.8"/>` +
+      `<path d="M5.29 10.32 5.37 8.62" stroke-width="1.2" opacity="0.65"/>` +
+      // The ring they are on.
+      `<circle cx="12" cy="12" r="8.4" stroke-width="1.1" ` +
+      `stroke-dasharray="1.5 2.8" opacity="0.32"/>` +
+      // And what all five are aimed at.
+      `<circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>` +
+      `<circle cx="12" cy="12" r="3.2" stroke-width="1" ` +
+      `stroke-dasharray="1.2 2" opacity="0.45"/>`
+  ),
+
   // The column, wound, standing in its own circle. The only glyph in the set
   // with nothing being *done* to anybody in it, which is the point: the shaft
   // runs out of the top of the frame because the light comes from further up

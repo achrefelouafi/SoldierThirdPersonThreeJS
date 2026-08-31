@@ -31,6 +31,7 @@ import { ShadowDash } from '../vfx/ShadowDash.js';
 import { SwordCombo } from '../vfx/SwordCombo.js';
 import { RunicBeam } from '../vfx/RunicBeam.js';
 import { CrimsonRite } from '../vfx/CrimsonRite.js';
+import { ShadowExecution } from '../vfx/ShadowExecution.js';
 import { TargetRings } from '../vfx/TargetRings.js';
 import { HealthBars } from '../vfx/HealthBars.js';
 import { CharacterScreen } from '../screens/CharacterScreen.js';
@@ -297,6 +298,23 @@ export class App {
       onShake: (metres) => this.rig.shake(metres)
     });
     this.scene.add(this.crimsonRite.group);
+
+    // And the shadow execution (`C`) — the second move built the rite's way,
+    // and the second to borrow the katana off the equipment library. Same two
+    // deferred things: a `blade` provider rather than a model, because the
+    // equipment does not exist until `load()` has built the character screen,
+    // and blows that are not frames in a clip. Its clip marks two beats; the
+    // impact and the tear-out happen seconds later on the ability's own clock
+    // and come back through `onImpale` and `onSever`, which land on the same
+    // two paths every other attack goes through.
+    this.shadowExecution = new ShadowExecution({
+      terrain: this.terrain,
+      blade: () => this.characterScreen?.equipment?.get('sword')?.model ?? null,
+      onImpale: (enemy, x, z) => this._onExecutionImpale(enemy, x, z),
+      onSever: (enemy, x, z) => this._onStrike(enemy, x, z, settings.shadowExecution),
+      onShake: (metres) => this.rig.shake(metres)
+    });
+    this.scene.add(this.shadowExecution.group);
 
     // The shooter. Dormant until the rifle is the weapon in the hand, and from
     // that moment it owns four things nothing else does: where the lens sits,
@@ -664,6 +682,11 @@ export class App {
     // and three katanas hanging in the air where the body they were called
     // against used to be.
     this.crimsonRite.dismiss({ immediate: true });
+    // And the execution, which is the rite's case over again and rather more of
+    // it: a column standing in ground the set does not have, a shockwave on a
+    // floor that is not there, and five katanas circling the spot where the
+    // body they were called against used to be.
+    this.shadowExecution.dismiss({ immediate: true });
     // And the rifle's own layers, which are the one thing on the body that is
     // not driven from the frame loop's play branch: the studio has its own
     // update path, so a torso left twisted toward a reticle in another scene
@@ -840,6 +863,24 @@ export class App {
       return;
     }
 
+    // The execution's first beat — the third thing in the game that reaches a
+    // body and costs it nothing. The dark and the ring of katanas are a
+    // promise, exactly as the rune and the rite's ink are.
+    if (beat?.kind === 'sever-mark') {
+      this.shadowExecution.mark(enemy);
+      return;
+    }
+
+    // And its second, which is the last thing the *clip* decides about this
+    // move. From here it runs on its own clock: a wind-up, five points arriving
+    // together, a hold and a tear-out, each reporting back through `onImpale`
+    // or `onSever`. So this returns rather than falling through to `_onStrike`
+    // below, because nothing has been hit yet.
+    if (beat?.kind === 'sever-cast') {
+      this.shadowExecution.cast(enemy);
+      return;
+    }
+
     // The finisher, and every other move in the game: the body goes down here.
     // The rift opens *before* the kill so it is centred on a body that is still
     // standing — a corpse's position is the ragdoll's, and by the next frame it
@@ -900,6 +941,32 @@ export class App {
    */
   _onRiteStab(enemy, x, z) {
     const config = settings.crimsonRite;
+    if (!enemy?.alive) return;
+    if (enemy.wound(config.wound) !== 'down') return;
+    this._onStrike(enemy, x, z, config);
+  }
+
+  /**
+   * Five summoned points reached a body on the same frame.
+   *
+   * The same shape as `_onRiteStab` and for the same reason: this is a blow on
+   * the way to a finisher, and the body has to still be there for it. It is one
+   * call rather than five, because five points arriving together are one event
+   * and not five — the rite's rhythm is the thing this move exists not to be.
+   *
+   * So it spends health and that is all. The lens is knocked by the execution
+   * itself (`onShake`) rather than here, and there is deliberately no hit-stop:
+   * freezing the world on the way to a finish that freezes it again would make
+   * one move feel like two.
+   *
+   * `settings.shadowExecution.wound` is tuned so this cannot take a full body
+   * to zero. If something else has already worn it down far enough that it
+   * does, it falls with the execution's own force — the same path the tear-out
+   * takes, so the corpse never leaves differently depending on which beat
+   * happened to be the last one.
+   */
+  _onExecutionImpale(enemy, x, z) {
+    const config = settings.shadowExecution;
     if (!enemy?.alive) return;
     if (enemy.wound(config.wound) !== 'down') return;
     this._onStrike(enemy, x, z, config);
@@ -1361,6 +1428,10 @@ export class App {
     // enemies have already been stepped, so a point that arrives this frame
     // meets a body that is where it says it is.
     this.crimsonRite.update(dt, this.elapsed);
+    // And the execution, on the same clock and for all the same reasons — it
+    // causes the hit-stop its own tear-out stands in, and the body coming apart
+    // inside it is on that clock too.
+    this.shadowExecution.update(dt, this.elapsed);
 
     // After everything that could have taken the body, so a chip lights on the
     // frame the move it names actually starts.
@@ -1405,6 +1476,7 @@ export class App {
     this.shadowDash.dispose();
     this.runicBeam.dispose();
     this.crimsonRite.dispose();
+    this.shadowExecution.dispose();
     this.targetRings.dispose();
     this.targetHotkeys.dispose();
     this.healthBars.dispose();

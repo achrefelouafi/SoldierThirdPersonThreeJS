@@ -2756,6 +2756,755 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
+  /* The shadow execution                                                */
+  /* ------------------------------------------------------------------ */
+  /**
+   * Five katanas, one body — `vfx/ShadowExecution.js`.
+   *
+   * The other multi-blade finisher, and deliberately the opposite of the rite
+   * in every beat that matters. The rite presents three blades and puts them in
+   * one at a time; this one calls five up, **turns them round the body** while
+   * the ring winds up and closes, and then puts all five in on the same frame.
+   * The rite throws blood. This throws pieces of something breaking, and what
+   * it leaves does not fall over — it comes apart.
+   *
+   * The whole first half of the move is `beats.circle` and the two numbers
+   * under `blades` that drive it (`windSpin`, `tighten`). If the ability ever
+   * feels like a light show rather than a threat, those three are the block to
+   * open first.
+   */
+  shadowExecution: {
+    enabled: true,
+
+    /**
+     * Metres a body can be locked from.
+     *
+     * The same distance the beats state as their `reach`, and for the same
+     * reason the rite's are: nothing here crosses the ground, so the only
+     * honest range is how far the mark can be struck.
+     */
+    range: 11,
+    /** Full width of the search cone, degrees. */
+    cone: 96,
+    /** Inert while `maxWarp` is zero: there is no mark to stand off from. */
+    standoff: 2.4,
+    /**
+     * Ceiling on the approach, metres — and here it is *none*, exactly as the
+     * rite's is. `Attack#_resolveWarp` clamps the step to it, so the warp still
+     * runs and still turns the body to face the mark; the execution is worked
+     * from where you stood.
+     */
+    maxWarp: 0,
+    warpFrom: 0,
+    warpAt: 0.24,
+    /** Square on well before the hands come down at 0.21. */
+    turnAt: 0.5,
+    /** Unused: `hits` names the contacts. Left at the frame the cast is let go. */
+    hitAt: 0.46,
+    /** Metres the *fallback* blow lands at. Both beats state their own. */
+    reach: 3.2,
+    /**
+     * Normalised time the stick is handed back.
+     *
+     * Earlier even than the rite's. This move runs for the better part of three
+     * seconds after the clip has finished and the caster is not needed for any
+     * of it — a character rooted for the whole of something they are only
+     * watching is the commonest way an ability of this length stops being fun.
+     */
+    recoverAt: 0.62,
+    /** The same cast the rite and the unmaking use, at the same pace. */
+    timeScale: 1.85,
+    blendIn: 0.12,
+    blendOut: 0.3,
+
+    /**
+     * The two beats the *clip* is responsible for, in clip-normalised time.
+     *
+     * Measured off the same hands the rite's are, because it is the same
+     * export: the frame the sweep closes, and the frame the arm drives out.
+     *
+     *  - `sever-mark` claims the ground and calls the five up. It cannot hurt
+     *    anybody and it is not meant to.
+     *  - `sever-cast` sets the ring turning in earnest, and is the last thing
+     *    the animation decides about this move.
+     */
+    hits: [
+      { at: 0.21, kind: 'sever-mark', beat: 0, reach: 11 },
+      { at: 0.46, kind: 'sever-cast', beat: 1, reach: 11 }
+    ],
+
+    /** Metres up the body the ring of blades turns — chest height. */
+    height: 1.25,
+
+    /**
+     * What five points arriving at once costs.
+     *
+     * One number rather than one per blade, because it is one event: five
+     * thrusts landing on one frame are not five blows. It must not reach the
+     * health an enemy stands up with (`settings.gunplay.damage.health`, 100) or
+     * the move kills its own victim before it can finish it — the same tuning
+     * the rite's `wound` needs. 74 leaves a body on 26, thin enough that the
+     * impact reads as very nearly fatal and wide enough that the tear-out
+     * always gets its turn.
+     */
+    wound: 74,
+
+    /**
+     * m/s along the blow and straight up, given to the body it takes.
+     *
+     * Almost nothing along and a real lift: five blades leaving on five
+     * bearings have no net direction between them. The body is pulled off its
+     * feet and comes apart on the way up rather than being thrown anywhere.
+     */
+    impulse: 0.4,
+    lift: 3.0,
+    /** Upper body multiplier — enough to fold it over as it goes. */
+    spin: 1.8,
+    /** Seconds the world nearly stops as the blades come out, and how far down. */
+    hitStop: 0.16,
+    hitStopScale: 0.04,
+    /** Metres the lens is knocked by the tear-out — the attack's own shake. */
+    shake: 0.42,
+    /** And by the impact, which is thrown from the ability's own clock. */
+    impaleShake: 0.34,
+    /** The tear-out's, likewise. */
+    severShake: 0.52,
+    /** Nothing is cut here. The body is not parted, it is unmade. */
+    slices: false,
+
+    /**
+     * How a body taken by this goes away — read by `combat/Enemy.js#die`.
+     *
+     * A fact about the *blow*, exactly as `slices` is. The rite burns its kills
+     * crimson from three wounds; this one takes them in violet from everywhere
+     * at once, which is why `dissolveRise` is nearly zero: what is eating the
+     * body is not fire climbing up it, it is five holes opening at the same
+     * time. The burn is deliberately slower than the rite's — the player has
+     * been made to watch a wind-up, and the pay-off is worth a full second.
+     *
+     * Setting it to null puts this move's kills back on the ordinary path,
+     * which is the useful thing to try if the dissolve is ever in question.
+     */
+    unmake: {
+      /** Seconds the body lies there first. Almost none: it is already going. */
+      corpseTime: 0.06,
+      /** And the seconds it takes to go, inside the move's own settle. */
+      dissolveTime: 1.3,
+      /** The burn line, its heat and how wide a band it is. */
+      edgeColor: '#b98cff',
+      edgeEmissive: 12.0,
+      edgeWidth: 0.22,
+      /** Eaten from everywhere at once rather than dipped in something. */
+      dissolveRise: 0.1
+    },
+
+    /**
+     * The choreography, in seconds — `vfx/ShadowExecution.js`.
+     *
+     * These are the move far more than `hits` is: everything after the cast is
+     * paced here.
+     *
+     * `charge` is the only one that is not a pace, it is a **timeout**. The
+     * clip's second beat normally sets the ring turning somewhere in the middle
+     * of the mark, and reaching the end means the execution lost what it was
+     * for — the body died to something else in between — so the dark sinks
+     * rather than five katanas circling grass. Keep it comfortably longer than
+     * the gap between the two beats (0.62 s at the pace above).
+     */
+    beats: {
+      /** The floor going violet and the five resolving out of it, one by one. */
+      mark: 0.45,
+      /** Held, gathering — and the fizzle timeout. See above. */
+      charge: 1.6,
+      /**
+       * The wind-up: the ring accelerating and closing, and the crescents.
+       *
+       * The single most important number in the block. Under about six tenths
+       * the ring has no time to visibly *speed up* and the move is a summons
+       * followed by a stab; much over a second and a half the player is waiting
+       * rather than watching.
+       */
+      circle: 1.0,
+      /**
+       * How long the body is held on the five points before they come out.
+       *
+       * The pause before the tear, and it is doing real work: without it the
+       * impact and the finish are one event and the move has two beats instead
+       * of four.
+       */
+      pin: 0.45,
+      /** The tear-out, and the body coming apart with it. */
+      sever: 0.65,
+      /** And the dark sinking back into the ground it came out of. */
+      settle: 1.0,
+      /**
+       * Seconds after which the move finishes with whatever landed.
+       *
+       * A safety valve, not a pace. It is measured from the frame the thrusts
+       * are ordered, and they take `blades.beats.thrust` to arrive — so the
+       * normal path is nowhere near it. It exists because everything from the
+       * impact onward depends on points *arriving*, and one that never does
+       * would leave the move holding a body and its own key forever.
+       */
+      abandon: 1.2
+    },
+
+    /** Master on the ring struck by each beat — the mark, the impact, the tear. */
+    markRing: 0.75,
+    impaleRing: 0.95,
+    severRing: 1.15,
+
+    /**
+     * 1 · The light on the floor — `vfx/ShadowPool.js`, bound to the height field.
+     *
+     * It has no shape at all and that is its job: four of the nine layers here
+     * *subtract*, and this is the source they are seen against. Turn it off and
+     * the ability is a set of dark shapes over dark ground.
+     */
+    glow: {
+      /** Metres from the middle to where the spill has run out. */
+      radius: 2.9,
+      /** Metres off the floor. Enough to beat the depth buffer, not to see. */
+      lift: 0.028,
+      /**
+       * Bluer than everything above it, and on purpose: the pool is the one
+       * part of the aura that reads as a *source* rather than as smoke lit by
+       * one, and the eye is told that by hue as much as by brightness.
+       */
+      color: '#6a3cff',
+      coreColor: '#b49cff',
+      intensity: 2.6,
+      /** How the spill falls off. Low is a wide wash; high is a tight bloom. */
+      falloff: 1.9,
+      /** How much of the radius the hot middle takes, and how tight it is in it. */
+      core: 0.3,
+      corePower: 3.4,
+      pulse: 0.14,
+      pulseSpeed: 2.4,
+      mottle: 0.35,
+      mottleScale: 2.1,
+      mottleSpeed: 0.22
+    },
+
+    /**
+     * 2 · The shockwave — `vfx/RiteRings.js`.
+     *
+     * The reference's third panel is not one ring: it is a train of them at
+     * several radii at once, with the ground between split into radial cracks
+     * that glow along their floors, and the whole disc scorched. `rings` is how
+     * many fronts are in the train and `ringGap` is how far apart they are
+     * launched — five at 0.1 is that picture.
+     */
+    rings: {
+      enabled: true,
+      color: '#8b5cff',
+      coreColor: '#f0e8ff',
+      crackColor: '#a06bff',
+      scorchColor: '#05030a',
+      intensity: 2.4,
+      /** Metres the outermost front reaches, and how long the disc lives. */
+      radius: 4.4,
+      life: 1.7,
+      /** The train: how many fronts, how far apart, and how much each loses. */
+      rings: 3,
+      ringGap: 0.1,
+      ringReach: 0.86,
+      /** Stroke weight of a front and its feather, in fractions of the radius. */
+      width: 0.014,
+      softness: 0.012,
+      /** The cracks: how many, how long, how wide, how hot. */
+      cracks: 28,
+      crackLength: 0.95,
+      crackWidth: 0.01,
+      crackGlow: 1.9,
+      /** The burn: how dark, how far out, how much of the life it fades over. */
+      scorch: 0.7,
+      scorchRadius: 0.75,
+      scorchFade: 0.35,
+      /** Metres it stands off the floor, out of the ground's z-fight. */
+      lift: 0.035
+    },
+
+    /**
+     * 3 · The column — `vfx/DarkPillar.js`.
+     *
+     * The vertical. Every other layer here is flat on the floor or wrapped
+     * round the body, and without one thing standing up out of the middle the
+     * composite has no height at all. It is brightest through its *middle* and
+     * dark at its edges — see the module for why the obvious way round is
+     * wrong.
+     */
+    column: {
+      radius: 0.3,
+      height: 6.4,
+      color: '#8b5cff',
+      coreColor: '#f2ecff',
+      shadeColor: '#08061a',
+      intensity: 0.68,
+      shade: 0.05,
+      shadePower: 3.1,
+      corePower: 5.2,
+      rimPower: 3.8,
+      rim: 1.1,
+      topFade: 0.62,
+      /** The striations running up the wall, their size and their pace. */
+      streaks: 0.62,
+      streakScale: 3.8,
+      streakSpeed: 3.1,
+      /** The lightning inside it. */
+      veins: 2.2,
+      veinScale: 2.2,
+      veinRate: 10.4,
+      veinPower: 10.2,
+      veinBranch: 0.6,
+      /** The hot lip riding the head while it is still climbing. */
+      front: 0.55,
+      pulse: 0.18,
+      pulseSpeed: 4.5,
+      /** The flare at its foot, and how far up it reaches. */
+      flare: 0.55,
+      flareHeight: 0.05,
+      /** Fraction wider the bore is as it comes up out of the floor. */
+      arrivalWidth: 0.35,
+      /** And how far it is thrown open by the impact, and by the tear-out. */
+      pinWidth: 0.3,
+      severWidth: 0.6
+    },
+
+    /**
+     * 4 · The aura — `vfx/SmokeWisps.js`.
+     *
+     * The reference's fourth panel: slow black plumes climbing and curling with
+     * violet caught in their edges. The *slow* layer, and the one that says the
+     * thing is still happening rather than having happened. `count` is density
+     * and `span` is how much of the height one wisp occupies.
+     */
+    wisps: {
+      count: 30,
+      color: '#3a2b58',
+      rimColor: '#8b5cf6',
+      opacity: 1,
+      rim: 1.85,
+      /** Metres out they stand, and metres up they reach. */
+      radius: 2.3,
+      height: 5.4,
+      /** How hard they wind, which way, and how much they lean. */
+      curl: 0.8,
+      writhe: -0.42,
+      sway: 0,
+      span: 0.6,
+      speed: 0.28,
+      width: 0.28,
+      spread: 2.2,
+      topScale: 1.12,
+      softness: 2.15,
+      /** How fine the erosion across one is, how fast it churns, how much. */
+      detail: 5.75,
+      churn: 0.68,
+      erode: 0.57
+    },
+
+    /**
+     * 5 · The torn shadow — `vfx/ShadowSwirl.js`.
+     *
+     * Fast and horizontal where the wisps are slow and vertical: the aura needs
+     * both or it reads as one motion. Also the other layer that subtracts.
+     */
+    swirl: {
+      color: '#1c1430',
+      rimColor: '#9b6cff',
+      opacity: 0.95,
+      rim: 1.9,
+      /** Puffs a second while the ring is turning, and while it is gathering. */
+      rate: 58,
+      gatherRate: 26,
+      /** And thrown out all at once by the two impacts. */
+      impaleBurst: 90,
+      severBurst: 150,
+      spread: 0.7,
+      life: 2.15,
+      spin: 2.6,
+      reverse: false,
+      widen: 0.3,
+      rise: 3.6,
+      spawnHeight: 2.2,
+      size: 0.54,
+      grow: 1.4,
+      stretch: 2.3,
+      wobble: 0.3,
+      wobbleSpeed: 1.5,
+      detail: 1.7,
+      churn: 0.76,
+      softness: 0.21,
+      erode: 0.55
+    },
+
+    /**
+     * 6 · The shatter — `vfx/ShadowShards.js`.
+     *
+     * The reference's second panel, and the only layer in the ability with
+     * mass. `jagged` and `rimWidth` are the two that decide what a piece looks
+     * like: the first is how far the hashed corners may wander off even
+     * spacing — 0 is five regular pentagons, and past about 1.2 the pieces
+     * start folding through themselves — and the second is how much of the
+     * violet is showing along an edge.
+     */
+    shards: {
+      enabled: true,
+      /** The facet, the fringe along its edges, and the heat in its fractures. */
+      color: '#08040f',
+      rimColor: '#8b5cf6',
+      coreColor: '#e9dcff',
+      opacity: 0.95,
+      rim: 0.95,
+      rimWidth: 0.06,
+      heat: 0.9,
+      jagged: 0.95,
+      softness: 0.05,
+      churn: 0.35,
+      /** Metres across a piece is, and how much it opens out over its life. */
+      size: 0.075,
+      grow: 0.35,
+      /** Radians a second it tumbles, ± this. */
+      spin: 3.6,
+      /** Shared: how fast they are thrown, how long they last, how they slow. */
+      speed: 7.5,
+      life: 0.9,
+      drag: 2.8,
+      gravity: -8.5,
+      /** The lift under a piece, so the field hangs before the fall takes it. */
+      rise: 1.6,
+      /** Radians of the cone one thrust breaks along. */
+      spread: 0.8,
+      /** Broken off the steel by one of the five thrusts. */
+      stabCount: 34,
+      stabStrength: 1.0,
+      /** Thrown out of the body by the impact itself. */
+      impaleCount: 150,
+      impaleStrength: 1.25,
+      impaleRadius: 0.45,
+      /** And by the tear-out, which is the frame the body comes apart. */
+      severCount: 200,
+      severStrength: 1.8,
+      severRadius: 0.7
+    },
+
+    /**
+     * 7 · The embers — `vfx/CinderStreaks.js`.
+     *
+     * The reference's sixth panel. `stretch` decides the whole character of the
+     * field: an ember is drawn along the direction it is actually travelling by
+     * an amount proportional to how fast it is going *now*, so one number gives
+     * the panel's mixture of long streaks and near-points.
+     */
+    cinders: {
+      enabled: true,
+      color: '#8b5cff',
+      coreColor: '#efe6ff',
+      intensity: 2.0,
+      /** Shared: how fast they are thrown, how long they last, how they slow. */
+      speed: 7.5,
+      life: 1.0,
+      drag: 1.5,
+      gravity: -2.0,
+      /** The lift under an ember — these should not simply rain. */
+      rise: 1.3,
+      /** How big one is before its speed stretches it, and by how much. */
+      size: 0.016,
+      stretch: 2.4,
+      maxStretch: 9.0,
+      /** The light around one, and the flicker each is on. */
+      halo: 0.55,
+      flicker: 0.4,
+      flickerSpeed: 22.0,
+      /** Shed off the steel by one of the five thrusts, in a cone about it. */
+      stabCount: 22,
+      stabStrength: 1.0,
+      spread: 0.7,
+      /** Thrown in every direction by the tear-out. */
+      severCount: 100,
+      severStrength: 1.35,
+      severRadius: 0.7,
+      /** And the slow drift up out of the dark, for as long as there is any. */
+      drift: 55,
+      driftHeight: 0.2,
+      driftSpread: 0.85,
+      driftStrength: 0.34
+    },
+
+    /**
+     * 8 · The crescents — `vfx/SlashTrails.js`.
+     *
+     * The reference's first panel and the layer the whole move is read off.
+     * This block is what a stroke is *made of* and it is shared by all three
+     * gestures below, so the move cannot come apart into three looks.
+     */
+    trails: {
+      enabled: true,
+      /** The white heat, the body of it, and the dark it fades into. */
+      coreColor: '#f3ebff',
+      color: '#9a5cff',
+      edgeColor: '#1a0640',
+      intensity: 1.35,
+      /**
+       * Where the white line sits across the stroke, 0 at the trailing edge and
+       * 1 at the leading one, and how wide it is. Deliberately not 1: a little
+       * inside leaves a thin skin of violet *ahead* of the white, and that skin
+       * is what the eye reads as an edge rather than as a tube.
+       */
+      razor: 0.85,
+      razorWidth: 0.05,
+      core: 0.45,
+      falloff: 1.0,
+      /** How pointed the ends are. Higher is a finer needle. */
+      tip: 0.5,
+      /** Fraction of its life the stroke is still being swept over. */
+      draw: 0.14,
+      headSoft: 0.09,
+      /** The bloom riding the front while it is being swept. */
+      headFlare: 0.55,
+      /** The tearing: how fine the pieces are, how fast they crawl, how much. */
+      detail: 5.0,
+      flow: 1.3,
+      tear: 0.62,
+      /** Filament splitting along the stroke — the hairs in the reference. */
+      hair: 26.0,
+      hairDepth: 0.45
+    },
+
+    /**
+     * The crescent a *circling* blade drags behind it.
+     *
+     * The one gesture in the project struck by something travelling rather than
+     * by a blow landing, and the reason the wind-up reads as a cage closing
+     * rather than as five props going round. Its radius is not taken from here:
+     * `ShadowExecution#_dragArcs` overrides it with the radius the ring is
+     * actually at this frame, so the arc is a genuine piece of the circle the
+     * blade is on. Everything else is.
+     *
+     * `rate` is crescents a second **per blade** — one continuous trail behind
+     * each katana — and it is the density dial. Five blades at nine a second
+     * with a stroke living just over half a second is about twenty-five alive
+     * at once, which is what `vfx/SlashTrails.js`'s pool is sized for. Much
+     * higher and it starts recycling strokes that are still bright, which reads
+     * as crescents vanishing in mid-air.
+     */
+    orbitArc: {
+      count: 1,
+      spread: 0.35,
+      /** Overridden per stroke — see above. Kept for the editor to show. */
+      radius: 2.4,
+      sweep: 2.6,
+      width: 0.42,
+      life: 0.55,
+      /** Metres the arc is sheared along its own axis, so the ring is a helix. */
+      pitch: 0.7,
+      /**
+       * How far off vertical a crescent's sweep plane is allowed to lean.
+       *
+       * The honest axis is straight up — the ring is level, so the arc a
+       * blade leaves is level — and a set of level arcs is a *collar*: hoops
+       * stacked at one height round the waist. The reference's crescents
+       * cross at every angle and pass over and behind the figure, and this
+       * is the number that buys that. 0 is the collar; much past 1 and the
+       * arcs stop agreeing that anything is going round at all.
+       */
+      tilt: 0.62,
+      strength: 1.0,
+      rate: 11
+    },
+
+    /**
+     * The thrust's gesture: long, shallow, barely curved.
+     *
+     * A big radius with a small sweep is a piece of a very large circle, which
+     * is a nearly straight streak — which is what a thrust leaves.
+     */
+    stabArc: {
+      count: 2,
+      spread: 0.5,
+      radius: 2.8,
+      sweep: 0.5,
+      width: 0.34,
+      life: 0.34,
+      pitch: 0.35,
+      strength: 0.9
+    },
+
+    /**
+     * The tear-out's: tight, wide and violent.
+     *
+     * A small radius with a large sweep is most of a circle — the crescents the
+     * reference's first panel is full of. Same look, opposite gesture, and that
+     * contrast is the cheapest way to make a finisher feel like a different
+     * kind of thing from the blow that set it up.
+     */
+    severArc: {
+      count: 3,
+      spread: 0.9,
+      radius: 1.25,
+      sweep: 2.8,
+      width: 0.46,
+      life: 0.7,
+      pitch: 0.85,
+      strength: 1.25
+    },
+
+    /**
+     * 9 · The katanas — `vfx/PhantomBlades.js`.
+     *
+     * The character's own weapon, borrowed off the equipment library rather
+     * than modelled here. `length` is the only number that changes the mesh: it
+     * is what the piece is scaled to, end to end, and moving it rebuilds them.
+     *
+     * The four numbers this ability adds to the rite's are `orbit`, `gatherSpin`,
+     * `windSpin` and `tighten`, and between them they *are* the first half of
+     * the move.
+     */
+    blades: {
+      enabled: true,
+      /** How many come. Five, which is the move. Six is the ceiling. */
+      count: 5,
+      /** Metres a summoned blade is, point to pommel. */
+      length: 1.5,
+      /** Which end of the measured piece is the point — see the module. */
+      flip: false,
+      /** Metres out the ring turns, and metres in a thrust finishes. */
+      standoff: 2.5,
+      bite: 0.24,
+      /** Metres apart in height, so five points are not a level diagram. */
+      spreadHeight: 0.42,
+      /**
+       * Radians a second the ring turns, before the drive scales it.
+       *
+       * Set this to 0 and the blades hang exactly as the rite's do, which is
+       * the fastest way to see how much of this ability is the turn.
+       */
+      orbit: 2.2,
+      /** The drift while they are still arriving, as a multiple of `orbit`. */
+      gatherSpin: 1.0,
+      /** And what it winds up to by the frame they go in. */
+      windSpin: 4.6,
+      /** Fraction of `standoff` the ring has closed to by then. */
+      tighten: 0.52,
+      /**
+       * Seconds between one blade resolving out of the dark and the next.
+       *
+       * Five of these is the ability's opening statement, so it wants to be
+       * long enough to *count*: at 0.13 the last one arrives about two thirds
+       * of a second after the first, which is one blade per beat of the music
+       * anybody would put under this.
+       */
+      stagger: 0.13,
+      /** Metres further out a blade starts before it drifts to the ring. */
+      gatherDrift: 0.6,
+      /** Depth and beat of the hover while it waits. */
+      hover: 0.05,
+      hoverSpeed: 2.6,
+      /** Radians a second it turns about its own line, ± this. */
+      spin: 1.4,
+      /** The ring in the steel once it is in: how far, how fast, how it dies. */
+      quiver: 0.04,
+      quiverSpeed: 46.0,
+      quiverDecay: 9.0,
+      /** The tear-out: metres out the far side, how high, how curved. */
+      throughDistance: 3.6,
+      throughLift: 1.8,
+      throughArc: 0.8,
+      /** Radians it rolls about its own line on the way out. */
+      throughRoll: 3.4,
+      /** m/s a banished blade drifts up as it burns off. */
+      fadeRise: 0.8,
+
+      /** Seconds each state of one blade takes — see `vfx/PhantomBlades.js`. */
+      beats: {
+        /** Resolving out of the dark, point first. */
+        gather: 0.32,
+        /**
+         * The thrust. Under about a tenth of a second and the blade teleports;
+         * much over a fifth and it is being pushed rather than driven.
+         */
+        thrust: 0.12,
+        /** Coming out the far side. */
+        wrench: 0.5,
+        /** And burning off, for one that never got used. */
+        fade: 0.4
+      },
+
+      /** The steel: near-black, the sheen on it, and the violet round it. */
+      bodyColor: '#191233',
+      sheenColor: '#e6dcff',
+      rimColor: '#a97cff',
+      rim: 1.05,
+      rimPower: 3.0,
+      /**
+       * How much broad light the steel takes — the *shape* term.
+       *
+       * The rite's block does not have this field at all, and its blades
+       * are drawn without it: three katanas against a wall of crimson smoke
+       * read perfectly well as silhouettes with hot edges. These are called
+       * against open night with nothing bright behind them, and a fresnel on
+       * its own gives every face of the piece the same value — one flat
+       * strip with a glowing outline, no blade, no guard, no grip. This is
+       * what puts a lit side and a dark side back on it.
+       */
+      wash: 0.55,
+      /** The burn that puts it there and takes it away. */
+      edgeColor: '#cfb0ff',
+      edgeEmissive: 11.0,
+      edgeWidth: 0.15,
+      /**
+       * Features per metre in the burn's mask. High, and it has to be: a blade
+       * is three centimetres across, so anything under about twenty features
+       * per metre reads as the blade being cut in half rather than as it coming
+       * apart.
+       */
+      detail: 34.0,
+      /**
+       * How much of the burn runs along the piece rather than being pure
+       * static. High, because a summoned blade should arrive *point first*.
+       */
+      burnRise: 0.64,
+      /** The energy crawling up the steel, and how fast. */
+      veins: 0.9,
+      veinFlow: 1.7
+    },
+
+    /**
+     * The one light the whole execution shares.
+     *
+     * Unlike the rite's, this one has a *standing* term as well as its flashes
+     * (`hold`): four of the nine layers subtract, and between the beats the body
+     * in the middle of them would otherwise be lit by nothing at all.
+     */
+    light: {
+      color: '#8b5cff',
+      intensity: 26.0,
+      range: 16.0,
+      /** Three's own falloff exponent on the point light. */
+      decay: 2.2,
+      /**
+       * Metres off the floor the *standing* glow sits.
+       *
+       * Low, and deliberately: the ring's middle is inside the body, and a
+       * point light in there lights none of it — every normal on the outside
+       * faces away. This one up-lights the body off the ground the dark is
+       * coming out of, which is the reading the reference has. A flash still
+       * fires wherever it actually happened.
+       */
+      height: 0.45,
+      /** Seconds a flash takes to fall away. */
+      fall: 0.4,
+      /** What the light is worth between the beats, as a fraction of the above. */
+      hold: 0.22,
+      /** And what each event is worth, on the same scale. */
+      mark: 0.3,
+      impale: 0.85,
+      sever: 1.0
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
   /* The slice                                                           */
   /* ------------------------------------------------------------------ */
   /**

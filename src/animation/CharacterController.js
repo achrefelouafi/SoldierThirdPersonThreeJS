@@ -204,6 +204,14 @@ export class CharacterController {
      */
     this.crimsonRite = null;
     /**
+     * The shadow execution — the same machine on the same cast, and the second
+     * move that goes on happening long after its clip has finished. Its two
+     * beats mark a body and then set five katanas circling it; the impact and
+     * the tear-out are both on `vfx/ShadowExecution.js`'s own clock. See
+     * `settings.shadowExecution`.
+     */
+    this.shadowExecution = null;
+    /**
      * Every attack the body has, in the order a press is offered to them.
      *
      * The one list the controller reads and the one each attack checks to see
@@ -360,6 +368,14 @@ export class CharacterController {
     this.crimsonRite = new Attack(this.mixer, cast ? cast.clone() : null, this, {
       configKey: 'crimsonRite'
     });
+    // And the execution, on that same cast — the body is asking for something
+    // in all three, and there is one clip on the rig for that. A clone again,
+    // and for the reason set out above: three `Attack`s handed one clip would
+    // be handed one `AnimationAction` and would spend the game fighting over a
+    // single weight.
+    this.shadowExecution = new Attack(this.mixer, cast ? cast.clone() : null, this, {
+      configKey: 'shadowExecution'
+    });
     this.attacks = [
       this.attack,
       this.slashHit,
@@ -367,7 +383,8 @@ export class CharacterController {
       this.flipKick,
       this.swordCombo,
       this.voidBeam,
-      this.crimsonRite
+      this.crimsonRite,
+      this.shadowExecution
     ].filter((move) => move.available);
 
     this.locomotion = new Locomotion(
@@ -914,6 +931,7 @@ export class CharacterController {
     this.swordCombo = null;
     this.voidBeam = null;
     this.crimsonRite = null;
+    this.shadowExecution = null;
     this.mixer?.stopAllAction();
     this.mixer = null;
     this.locomotion = null;

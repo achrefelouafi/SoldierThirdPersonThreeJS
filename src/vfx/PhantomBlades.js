@@ -71,6 +71,17 @@ const _basis = /* @__PURE__ */ new Matrix4();
  * *when*: `vfx/CrimsonRite.js` calls `stab` and `wrench` on the beat, exactly
  * as `core/App.js` calls the rite on the frame of a clip.
  *
+ * ## Hanging, or going round
+ *
+ * A waiting blade does one of two things, and it is the one number `config.orbit`
+ * decides. At zero it hangs on the bearing it was summoned on and breathes —
+ * the rite's ring, three blades presented and then used. Above zero the ring
+ * **turns**, and every waiting blade is re-placed on it each frame and re-aimed
+ * at the body from wherever it has got to (`_orbit`). The owner drives the rate
+ * and the radius through `update`'s `drive`, so a summons can drift, wind up to
+ * a blur and close in before it goes — which is what
+ * `vfx/ShadowExecution.js` is built on and the rite never asks for.
+ *
  * One thing travels back the other way, and it is the important one.
  * `onPierce` fires on the frame the point actually reaches the body — not the
  * frame the stab was ordered. A thrust takes time to arrive, and dealing the
@@ -164,6 +175,14 @@ export class PhantomBlades {
       // Not all at one height: three points on a level ring is a diagram, and
       // the reference's blades come in high, low and across.
       const lift = ((i % 3) - 1) * config.spreadHeight;
+
+      // The ring itself, kept rather than baked away, so a blade that is going
+      // *round* the body can be re-placed on it every frame. A summons that
+      // only ever hangs still (`orbit` 0) never reads any of these back.
+      blade.centre.copy(centre);
+      blade.centre.y += height;
+      blade.angle = angle;
+      blade.lift = lift;
 
       // Where it goes in. Just off the centre line rather than through it — a
       // thrust that ends exactly on the axis has every blade meeting at one
@@ -289,12 +308,19 @@ export class PhantomBlades {
    *   the blow it lands, so it holds through the hit-stop
    * @param {number} elapsed the shared clock, for the burn's own crawl
    * @param {object} config `settings.crimsonRite.blades`
+   * @param {{spin?: number, draw?: number, centre?: Vector3|null}} [drive] what
+   *   the *owner* is doing to the ring this frame, and the only thing about a
+   *   waiting blade this class does not decide for itself. `spin` scales the
+   *   orbit rate, `draw` scales its radius (1 is the full standoff, 0 is on the
+   *   mark) and `centre` re-seats the ring on a body that has moved. All three
+   *   are inert while `config.orbit` is zero, which is why the rite never
+   *   passes any of them.
    */
-  update(dt, elapsed, config) {
+  update(dt, elapsed, config, drive = null) {
     for (const blade of this.blades) {
       if (blade.state === 'hidden') continue;
       blade.timer += dt;
-      this._advance(blade, dt, elapsed, config);
+      this._advance(blade, dt, elapsed, config, drive);
       if (blade.state !== 'hidden') this._sync(blade, elapsed, config);
     }
   }
@@ -336,15 +362,18 @@ export class PhantomBlades {
    * point onto the mark, `buried` holds it there, `wrench` takes it out the far
    * side, `fade` burns off what is left.
    */
-  _advance(blade, dt, elapsed, config) {
+  _advance(blade, dt, elapsed, config, drive = null) {
     const beats = config.beats;
 
     switch (blade.state) {
       case 'gather': {
         // Still inside its own stagger: it does not exist yet, and the first
-        // thing it does must not happen early.
+        // thing it does must not happen early. It is carried round the ring
+        // anyway, so a blade that resolves late resolves where the ones before
+        // it have already got to rather than at the bearing it was summoned on.
         if (blade.timer < 0) {
           blade.form = 0;
+          this._orbit(blade, dt, config, drive);
           this._place(blade, blade.home);
           return;
         }
@@ -352,6 +381,7 @@ export class PhantomBlades {
         // Resolving out of the smoke rather than appearing in it. The burn runs
         // backwards from the point, so a blade arrives tip first.
         blade.form = Easing.outQuad(u);
+        this._orbit(blade, dt, config, drive);
         // And drifting in as it does, so it is *coming* rather than waiting.
         _scratch.copy(blade.home).addScaledVector(blade.dir, -config.gatherDrift * (1 - u));
         this._place(blade, _scratch);
@@ -364,6 +394,7 @@ export class PhantomBlades {
 
       case 'poised': {
         blade.form = 1;
+        this._orbit(blade, dt, config, drive);
         // Hanging, breathing on its own line. A blade holding perfectly still
         // reads as a prop that has been placed.
         const hover = Math.sin(elapsed * config.hoverSpeed + blade.seed) * config.hover;
@@ -438,6 +469,66 @@ export class PhantomBlades {
   }
 
   /**
+   * Carry a waiting blade round the ring, and re-aim it from where it got to.
+   *
+   * ## Why a summons that goes round is a different move
+   *
+   * A ring of blades that hangs still is a *presentation*: they are shown to
+   * the player, and then they are used. A ring that **turns** is a threat being
+   * wound up — the body in the middle is being circled, the bearing each blade
+   * will come in on is changing while it is being decided, and the speed of the
+   * turn is a dial the owner can run from a drift to a blur. That difference is
+   * the whole character of the execution against the rite, and it costs this
+   * one method.
+   *
+   * Everything is re-resolved from the angle rather than integrated: where it
+   * waits, where it goes in, where it leaves, and which way it is pointing.
+   * Which means a blade is always aimed at the body from wherever it has got to,
+   * and re-aiming is free — there is no accumulated offset to correct.
+   *
+   * Inert unless `config.orbit` is nonzero, so `vfx/CrimsonRite.js`'s blades
+   * hang exactly as they always have.
+   */
+  _orbit(blade, dt, config, drive) {
+    const rate = config.orbit ?? 0;
+    if (!rate) return;
+
+    // The body may have staggered since the summons. Re-seating the ring rather
+    // than dragging the blades after it keeps every bearing honest: a ring
+    // trailing a moving body puts its blades where the body *was*.
+    // `drive.centre` is the ring's middle already — the body's position with
+    // the ability's own `height` on it, which is the same point `summon` was
+    // handed.
+    if (drive?.centre) blade.centre.copy(drive.centre);
+
+    blade.angle += rate * (drive?.spin ?? 1) * dt;
+
+    const cos = Math.cos(blade.angle);
+    const sin = Math.sin(blade.angle);
+    const radius = Math.max(config.bite + 0.05, config.standoff * (drive?.draw ?? 1));
+    const cx = blade.centre.x;
+    const cy = blade.centre.y + blade.lift;
+    const cz = blade.centre.z;
+
+    blade.home.set(cx + cos * radius, cy, cz + sin * radius);
+    // Just off the centre line, exactly as the summons placed it: five thrusts
+    // that all end on the axis meet at one point, and what should read as five
+    // wounds reads as a pin cushion.
+    blade.mark.set(cx + cos * config.bite, cy - blade.lift * 0.5, cz + sin * config.bite);
+    blade.exit.set(
+      cx - cos * config.throughDistance,
+      blade.centre.y + config.throughLift,
+      cz - sin * config.throughDistance
+    );
+    // And the body it is aimed at, so `stab`'s re-aim has the offset it expects.
+    blade.aimedAt.set(cx, cy - blade.lift * 0.5, cz);
+
+    blade.dir.subVectors(blade.mark, blade.home);
+    if (blade.dir.lengthSq() < 1e-8) blade.dir.set(0, 0, 1);
+    blade.dir.normalize();
+  }
+
+  /**
    * Put the point here, aimed the way this blade is aimed.
    *
    * The holder's +Z is the blade, because the template was turned onto it and
@@ -480,6 +571,9 @@ export class PhantomBlades {
       copyColor(u.uEdgeColor.value, config.edgeColor);
       u.uRim.value = config.rim;
       u.uRimPower.value = Math.max(0.2, config.rimPower);
+      // Absent from the rite's block, and that is the default the shader was
+      // written around — see `uWash` in `makeBladeMaterial`.
+      u.uWash.value = config.wash ?? 0;
       u.uEdgeEmissive.value = config.edgeEmissive;
       u.uEdgeWidth.value = Math.max(0.005, config.edgeWidth);
       u.uNoiseScale.value = config.detail;
@@ -669,7 +763,18 @@ export class PhantomBlades {
       aimedAt: new Vector3(),
       dir: new Vector3(0, 0, 1),
       roll: 0,
-      spin: 0
+      spin: 0,
+      /**
+       * The ring this blade is on: its middle, this blade's bearing round it,
+       * and how far off level it hangs.
+       *
+       * Only read while `config.orbit` is nonzero — see `_orbit`. For a summons
+       * that hangs still they are written once and never looked at again, which
+       * is three numbers and no branch in the common case.
+       */
+      centre: new Vector3(),
+      angle: 0,
+      lift: 0
     };
   }
 }
@@ -714,6 +819,16 @@ function makeBladeMaterial(toBlade) {
       uEdgeColor: { value: makeColor('#ff7038') },
       uRim: { value: 1.4 },
       uRimPower: { value: 2.6 },
+      /**
+       * How much broad, wrapped light the steel takes — a *shape* term.
+       *
+       * Zero by default, which is the rite: three blades read against a wall of
+       * its own crimson smoke, where a silhouette with a hot edge is all the
+       * shape needed and anything more would compete with the ink. Raise it and
+       * the piece gets a lit side and a dark side, which is what a katana needs
+       * when there is nothing bright behind it to be a silhouette against.
+       */
+      uWash: { value: 0 },
       uEdgeEmissive: { value: 8.0 },
       uEdgeWidth: { value: 0.14 },
       /** 1 = whole, 0 = gone. Runs backwards from the point. */
@@ -774,6 +889,7 @@ uniform vec3 uRimColor;
 uniform vec3 uEdgeColor;
 uniform float uRim;
 uniform float uRimPower;
+uniform float uWash;
 uniform float uEdgeEmissive;
 uniform float uEdgeWidth;
 uniform float uForm;
@@ -814,6 +930,13 @@ void main() {
   // A hard, narrow highlight rather than a soft roll-off: the one thing a
   // katana's surface does is throw a *line* of light down its flat.
   float sheen = pow(ndl, 12.0);
+  // And, optionally, the broad term under it. A fresnel alone gives every face
+  // of the piece the same value, so the blade, the guard and the grip all come
+  // out as one flat strip with a bright outline — which is what a katana looks
+  // like when it is a silhouette and nothing else. Wrapped rather than clamped,
+  // because a summoned blade is not lit by a lamp in a room; it only needs a
+  // side that is turned away.
+  float wrap = ndl * 0.5 + 0.5;
 
   /* ---- and what is running through it ---- */
   // Energy crawling up the steel toward the point, on a rate of its own so the
@@ -823,7 +946,7 @@ void main() {
 
   vec3 rgb =
     uBodyColor +
-    uSheenColor * sheen * 1.6 +
+    uSheenColor * (sheen * 1.6 + wrap * wrap * uWash) +
     uRimColor * fresnel * uRim +
     uEdgeColor * (edge * uEdgeEmissive + veins * 2.2);
 

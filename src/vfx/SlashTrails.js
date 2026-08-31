@@ -29,10 +29,18 @@ const SEGMENTS_V = 6;
  * Strokes on screen at once.
  *
  * A rite throws two per stab and five on the tear-out, and the tail of one
- * overlaps the head of the next — eighteen is the busiest frame plus room for a
- * second rite thrown on top of the first.
+ * overlaps the head of the next — which wanted about eighteen.
+ *
+ * The shadow execution is what set this number. It does something no other
+ * caller does: it drags a crescent off each of five blades *continuously* while
+ * they circle (`vfx/ShadowExecution.js#_dragArcs`), so a couple of dozen are
+ * alive at any moment before its tear-out throws fifteen more on top. Forty is
+ * that busiest frame with room over it. A stroke is a handful of floats and a
+ * spent one is not drawn, so the ceiling costs almost nothing to raise — and
+ * `_claim` recycling the oldest is a real fallback, not a plan: a stroke taken
+ * back while it is still bright is a crescent that vanishes mid-air.
  */
-const CAPACITY = 24;
+const CAPACITY = 40;
 
 const _pivot = /* @__PURE__ */ new Vector3();
 const _radial = /* @__PURE__ */ new Vector3();
