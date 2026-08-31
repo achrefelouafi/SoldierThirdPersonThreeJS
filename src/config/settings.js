@@ -3688,25 +3688,7 @@ export const settings = {
     pulseSpeed: 3.2,
     /** Seconds the ring takes to come up, and to go out once out of reach. */
     fadeIn: 0.12,
-    fadeOut: 0.2,
-
-    /**
-     * The key caps over the head of whoever is wearing a ring — see
-     * `ui/TargetHotkeys.js`.
-     *
-     * The ring says *this one*; the caps say *with which key*. They matter
-     * because the two attacks do not reach the same distance: at four metres
-     * the slash has a target and the kick has nothing, and without this the
-     * player has to learn that by whiffing. There is no fade of their own —
-     * they come up and go out on the ring's, because they are one mark.
-     */
-    hotkeys: {
-      enabled: true,
-      /** Metres above the top of the body the row floats. */
-      lift: 0.75,
-      /** Master on the row's size, 1 being the size the stylesheet sets. */
-      scale: 1.0
-    }
+    fadeOut: 0.2
   },
 
   /* ------------------------------------------------------------------ */

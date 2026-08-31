@@ -1091,70 +1091,6 @@ body.cs-open .stats {
 
 /* --------------------------------------------------------- target keys */
 
-/*
- * The keys that would land on the body under the aim, over its head — see
- * `ui/TargetHotkeys.js`. A layer over the whole canvas, with one absolutely
- * placed row per marked body moved by transform each frame; `overflow: hidden`
- * keeps a body at the edge of the frame from pushing a scrollbar out.
- */
-.target-keys {
-  position: fixed;
-  inset: 0;
-  z-index: 17;
-  overflow: hidden;
-  pointer-events: none;
-  user-select: none;
-}
-
-.target-keys__row {
-  position: absolute;
-  left: 0;
-  top: 0;
-  display: flex;
-  gap: 0.22rem;
-  /* The point the projection resolves is the row's bottom centre: it sits on
-     the head, and growing it lifts the caps rather than sliding them. */
-  transform-origin: bottom center;
-  will-change: transform, opacity;
-}
-
-/*
- * Filled and rounded rather than outlined like the row along the bottom: this
- * one is read in a fight, at a glance, over a moving body — so it has to hold
- * its own against whatever is behind it. The colour is the ring's, because the
- * cap and the circle under it are one mark.
- */
-.target-key {
-  min-width: 1.15rem;
-  padding: 0.15rem 0.32rem;
-  border-radius: 0.42rem;
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-align: center;
-  text-transform: uppercase;
-  color: #180a04;
-  background: rgba(255, 138, 74, 0.92);
-  border: 1px solid rgba(255, 206, 170, 0.7);
-  box-shadow: 0 0 10px rgba(255, 122, 60, 0.4);
-  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease,
-    box-shadow 0.16s ease, opacity 0.16s ease;
-}
-
-/*
- * The key is still the right one; the body is simply busy with the other move.
- * Dimmed rather than pulled, for the same reason the ability row dims a chip
- * instead of removing it — a cap that vanished mid-swing would read as the
- * target being lost.
- */
-.target-key.is-off {
-  opacity: 0.55;
-  color: rgba(220, 232, 247, 0.8);
-  background: rgba(10, 14, 20, 0.68);
-  border-color: rgba(255, 138, 74, 0.3);
-  box-shadow: none;
-}
-
 /* ------------------------------------------------------------------ hint */
 
 /*
@@ -1476,7 +1412,6 @@ body.cs-open .stats {
 
 /* The studio has its own panels and none of these moves; both get out of the way. */
 body.cs-open .hud,
-body.cs-open .target-keys,
 body.cs-open .reticle,
 body.cs-open .look-hint,
 body.cs-open .hint {

@@ -2480,13 +2480,6 @@ export class Editor {
     R(folder, t, 'lift', 0, 0.2, 0.005, 'off the floor (m)');
     R(folder, t, 'fadeIn', 0.01, 1, 0.01, 'fade in (s)');
     R(folder, t, 'fadeOut', 0.01, 1, 0.01, 'fade out (s)');
-
-    // The caps ride the ring's own fades, so there is nothing here but where
-    // they sit and how big they are.
-    const keys = folder.addFolder('Hotkeys over the head');
-    keys.add(t.hotkeys, 'enabled').name('enabled');
-    R(keys, t.hotkeys, 'lift', 0, 2, 0.01, 'above the head (m)');
-    R(keys, t.hotkeys, 'scale', 0.5, 2.5, 0.05, 'size ×');
   }
 
   /**

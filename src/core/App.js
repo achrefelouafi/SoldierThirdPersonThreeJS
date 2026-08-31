@@ -41,7 +41,6 @@ import { Editor } from '../ui/Editor.js';
 import { Toast } from '../ui/Toast.js';
 import { Stats } from '../ui/Stats.js';
 import { ActionHUD } from '../ui/ActionHUD.js';
-import { TargetHotkeys } from '../ui/TargetHotkeys.js';
 
 import { settings } from '../config/settings.js';
 
@@ -376,10 +375,6 @@ export class App {
     // The one chip that is also a control routes its click back here, so the
     // weapon swap is a button and a key saying the same thing.
     this.actionHUD = new ActionHUD({ onPress: (id) => this._onAction(id) });
-    // The same answer as the ring, over the head instead of under the feet: the
-    // ring says which body, these say with which key. Fed from
-    // `_updateTargetRings` — it resolves nothing of its own either.
-    this.targetHotkeys = new TargetHotkeys({ camera: this.camera, domElement: this.canvas });
     this.editor = new Editor({
       onToast: (message) => this.toast.show(message),
       onRespawnEnemies: () => {
@@ -695,7 +690,6 @@ export class App {
     // Nothing to be in reach of on the set, and the rings are not simulated
     // while it is up — so they come off now rather than being left mid-fade.
     this.targetRings.clear();
-    this.targetHotkeys.clear();
     this.healthBars.clear();
     // And the pointer, which the stage captures. The studio is a place you
     // point at things with a cursor, and the frame loop returns before
@@ -1001,7 +995,7 @@ export class App {
   }
 
   /**
-   * Light a ring under whoever a press would land on, and say which press.
+   * Light a ring under whoever a press would land on.
    *
    * The question is asked one move at a time, and it is the move's *own*
    * question: `findTarget` with that move's range and cone, which is the exact
@@ -1009,20 +1003,16 @@ export class App {
    * because a key would take it — not because it happens to be standing inside
    * some cone alongside three others the swing will never reach. Two rings can
    * still come up, and when they do they are telling the truth: the kick and
-   * the slash have locked different bodies, and the caps over each head say
-   * which key goes where.
+   * the slash have locked different bodies.
    *
    * Every *enabled* attack is asked, rather than only the ones that could start
    * this instant: the moves lock each other out for the length of a swing (see
    * `Attack#canStart`), and a ring that blinked off for the half second the
    * body was busy would read as the target being lost. `ready` carries that
-   * difference instead, and only dims the cap.
-   *
-   * That `ready` set is the single answer to "would this key do anything right
-   * now", and three things are drawn off it: the cap over the head, the plate
-   * along the bottom (`_syncAbilities`) and the press itself, which the
-   * controller refuses on the same `findTarget` call. One answer, so a plate
-   * cannot come up over a body no key would reach.
+   * difference and is the single answer to "would this key do anything right
+   * now" — the plate along the bottom (`_syncAbilities`) and the press itself,
+   * which the controller refuses on the same `findTarget` call, both draw off
+   * it. One answer, so a plate cannot come up over a body no key would reach.
    *
    * @param {number} dt
    * @param {import('three').Vector3} position
@@ -1047,8 +1037,9 @@ export class App {
       const enemy = this.enemies.findTarget(position, facing, move.config);
       if (!enemy) continue;
 
-      // Mid-swing counts as ready: the cap should be lit on the move the body
-      // is committed to, not dimmed the instant the key does its job.
+      // Mid-swing counts as ready: the press that owns the body is committed
+      // to it, so the plate along the bottom and the controller should not
+      // blink the move off for the half second the swing has it.
       if (move.locked || move.canStart()) ready.add(move.configKey);
 
       let keys = locked.get(enemy);
@@ -1060,7 +1051,6 @@ export class App {
     }
 
     this.targetRings.update(dt, locked, this.elapsed);
-    this.targetHotkeys.update(dt, locked, ready);
   }
 
   /**
@@ -1478,7 +1468,6 @@ export class App {
     this.crimsonRite.dispose();
     this.shadowExecution.dispose();
     this.targetRings.dispose();
-    this.targetHotkeys.dispose();
     this.healthBars.dispose();
     this.enemies.dispose();
     this.blood.dispose();
