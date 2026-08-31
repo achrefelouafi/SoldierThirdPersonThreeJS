@@ -1,6 +1,6 @@
-# Samurai — a third-person Three.js template
+# Soldier — a third-person Three.js template
 
-A complete third-person action stage in the browser: a rigged fighter on an
+A complete third-person action stage in the browser: a rigged soldier on an
 endless procedural night landscape, with locomotion, motion-warped melee, four
 thrown abilities, two boons, a shoulder-camera shooter, ragdoll deaths and an
 equipment studio to dress the body in.
@@ -127,9 +127,10 @@ thing back to a flat plane at y = 0, for free.
 
 ## The character
 
-![The blade](docs/media/blade.jpg)
+![The soldier](docs/media/blade.jpg)
 
-The body and its motion live in different files.
+An armoured soldier who fights with a katana in one loadout and a rifle in the
+other. The body and its motion live in different files.
 
 `public/models/tpose.fbx` is the skin: one textured, skinned mesh rigged to
 Mixamo's `mixamorig:` skeleton, in a T-pose with no animation of its own.

@@ -2,7 +2,7 @@
   "name": "character-equipment",
   "version": "1.0.0",
   "private": true,
-  "description": "A third-person Three.js template: a rigged samurai on an endless procedural night landscape, with motion-warped melee, ragdoll deaths and an equipment studio.",
+  "description": "A third-person Three.js template: a rigged soldier on an endless procedural night landscape, with motion-warped melee, thrown abilities, gunplay, ragdoll deaths and an equipment studio.",
   "type": "module",
   "scripts": {
     "dev": "vite",
