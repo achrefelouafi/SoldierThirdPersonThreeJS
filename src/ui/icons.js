@@ -159,6 +159,36 @@ export const ABILITY_ICONS = {
       `<path d="M5.6 5.4 6.1 6.2 5.6 7 5.1 6.2z" fill="currentColor" stroke="none" opacity="0.45"/>`
   ),
 
+  // Three blades converging on one point, and the rings the meeting throws.
+  //
+  // The trap next to `voidBeam` is that both moves are "a cast that ends a
+  // body", and a glyph that says only that would be the same drawing twice. So
+  // this one is built on the thing the beam has none of: **points**. Three of
+  // them, on three bearings, all aimed at one spot — a shape with a direction
+  // in it from every side, where the column is one vertical with no direction
+  // at all. At 26px the difference that survives is convergence against
+  // ascent, so the arrowheads are the drawing and the rings are a mark under it.
+  crimsonRite: stroke(
+    // The three blades: a shaft, a guard across it, and a point at the inner
+    // end. Drawn as three separate strokes rather than one star, because a star
+    // has no near and far and these are meant to be at three depths.
+    `<path d="M3.6 4.2 9.9 9.6" stroke-width="1.8"/>` +
+      `<path d="M3 6.6 5.6 3.4" stroke-width="1.3" opacity="0.7"/>` +
+      `<path d="M20.4 4.2 14.1 9.6" stroke-width="1.8"/>` +
+      `<path d="M21 6.6 18.4 3.4" stroke-width="1.3" opacity="0.7"/>` +
+      `<path d="M12 21.4V14.4" stroke-width="1.8"/>` +
+      `<path d="M9.9 21.8h4.2" stroke-width="1.3" opacity="0.7"/>` +
+      // The point they are all aimed at, and the flash of them arriving.
+      `<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>` +
+      `<path d="M12 7.4v2M7.6 14.6l1.7-1M16.4 14.6l-1.7-1" stroke-width="1.2" opacity="0.55"/>` +
+      // And the train of rings it puts on the floor — two of them, because one
+      // is an impact and several are a rite.
+      `<ellipse cx="12" cy="12" rx="4.4" ry="4.4" stroke-width="1.2" ` +
+      `stroke-dasharray="1.6 2.4" opacity="0.5"/>` +
+      `<ellipse cx="12" cy="12" rx="7.4" ry="7.4" stroke-width="1.1" ` +
+      `stroke-dasharray="1.4 3.2" opacity="0.28"/>`
+  ),
+
   // The column, wound, standing in its own circle. The only glyph in the set
   // with nothing being *done* to anybody in it, which is the point: the shaft
   // runs out of the top of the frame because the light comes from further up

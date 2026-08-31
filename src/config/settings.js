@@ -377,6 +377,182 @@ export const settings = {
     },
 
     /**
+     * The held shot — the one round the rifle fires that is not a round.
+     *
+     * ## The gesture
+     *
+     * The right button is already the sights. Held *still* for three seconds it
+     * becomes something else: a bar fills under the reticle
+     * (`ui/Crosshair.js`), and the release that would ordinarily just drop the
+     * sights sends one round instead — dead on the reticle, no cone at all, and
+     * whatever it lands on is taken apart by `vfx/FocusedBurst.js`.
+     *
+     * Three conditions hold the charge and any one of them breaking empties it:
+     * the sights up, the feet planted, and the trigger untouched. The last is
+     * the one worth saying out loud — the charge is a held breath, and a burst
+     * fired in the middle of one is the breath let go.
+     *
+     * ## What it costs
+     *
+     * `damage` is deliberately past a body's whole health: the round is three
+     * seconds of standing still in the open, and a shot that took three seconds
+     * to earn and then needed a second one is a shot nobody will ever take. The
+     * blast is what makes it worth aiming at a *crowd* rather than at a body —
+     * `blastDamage` at the centre, falling to nothing at `blastRadius`, and it
+     * cannot touch the body that was hit directly (that one is already spent).
+     */
+    focus: {
+      enabled: true,
+      /** Seconds the sights must be held, still, before the shot is offered. */
+      charge: 3.0,
+      /**
+       * Seconds the filled bar waits before the release stops meaning this.
+       *
+       * 0 is "for as long as the button is down", which is what this wants: a
+       * player who has earned the shot should be free to keep holding it while
+       * they pick a target. Anything above 0 puts a clock on that.
+       */
+      hold: 0,
+
+      /** What the one round is worth, in the chest and above the collar. */
+      damage: 240,
+      headDamage: 400,
+      /** m/s. Faster than an ordinary round, and it does not fall as far. */
+      speed: 260,
+      drop: 0.6,
+      /** Multiplier on the tracer's width and length, for this round only. */
+      tracer: 3.4,
+
+      /** Degrees the view is kicked, and metres the lens is knocked with it. */
+      recoilPitch: 2.4,
+      recoilYaw: 0.5,
+      shake: 0.05,
+      /** And what the *landing* is worth to the lens, wherever it happened. */
+      blastShake: 0.14,
+      /** Seconds the world nearly stops on the blast, and how far down it goes. */
+      hitStop: 0.085,
+      hitStopScale: 0.22,
+
+      /** Metres the blast reaches, and what it is worth at the middle of it. */
+      blastRadius: 3.6,
+      blastDamage: 140,
+      /** The blow the blast hands a ragdoll — everything here is thrown *out*. */
+      impulse: 6.5,
+      lift: 4.0,
+      spin: 2.4,
+
+      /**
+       * The devastation itself — `vfx/FocusedBurst.js`.
+       *
+       * Seven layers, painted back to front, and each one has its own `*Enabled`
+       * flag so it can be soloed against the other six. That is the only sane
+       * way to tune a stack this deep: the whole thing is one white flash for
+       * the first fifty milliseconds, and nothing in it can be judged while the
+       * other six are on top of it.
+       */
+      burst: {
+        enabled: true,
+        /** Seconds the longest layer lives. Every other layer is a share of it. */
+        life: 1.75,
+        /** Metres the shell opens to. The one number that sets the whole scale. */
+        radius: 3.1,
+        /** Master on every layer's brightness. */
+        intensity: 1.8,
+
+        /** 1. The dome of arcs: the shell, and the lines drawn on it. */
+        shellEnabled: true,
+        shellColor: '#3fa9ff',
+        shellCoreColor: '#d8f4ff',
+        /** Meridians round it and parallels up it — the cage in the reference. */
+        meridians: 7,
+        parallels: 5,
+        /** How wide an arc is, and how hard the rim it rides on burns. */
+        arcWidth: 0.05,
+        shellRim: 1.4,
+        /** Metres of boil on the silhouette, and how fine the boil is. */
+        shellWarp: 0.0,
+        shellDetail: 0.9,
+        /** Fraction of `life` the shell is out and gone in. */
+        shellLife: 0.41,
+
+        /** 2. The core: the white of it, and the star thrown off it. */
+        coreEnabled: true,
+        coreColor: '#eafaff',
+        coreHalo: '#38b6ff',
+        /** Metres across at its widest, and the fraction of `life` it lasts. */
+        coreSize: 10.0,
+        coreLife: 0.42,
+        /** Spikes on the star, and how far they reach past the ball. */
+        coreSpikes: 3,
+        coreSpikeLength: 1.7,
+
+        /** 3. The web of cracks under it. */
+        decalEnabled: true,
+        decalColor: '#2f9dff',
+        decalCoreColor: '#cdefff',
+        /** Metres across, and how high off the ground the burst may be and
+         *  still leave one — a round that hit a head does not crack the floor. */
+        decalRadius: 7.8,
+        decalReach: 6.7,
+        /** How fine the web is, spokes running out of the middle, and the burn. */
+        decalDetail: 5.8,
+        decalSpokes: 9,
+        decalScorch: 0.9,
+        /** Fraction of `life` the cracks take to write, and to fade after. */
+        decalWrite: 0.32,
+
+        /** 4. The chunks the floor gives up. */
+        debrisEnabled: true,
+        debris: 12,
+        /** Metres on a side, thrown at, and how far off straight up they go. */
+        debrisSize: 0.135,
+        debrisSpeed: 19.8,
+        debrisSpread: 1.54,
+        debrisGravity: -9.5,
+        debrisLife: 1.25,
+        debrisColor: '#b8b3ac',
+
+        /** 5. The sparks: the ember half of the shower. */
+        sparksEnabled: true,
+        sparks: 95,
+        sparkColor: '#ffb257',
+        sparkSpeed: 10.5,
+        sparkSize: 0.06,
+        sparkLife: 0.75,
+        sparkStretch: 0.05,
+        sparkDrag: 1.7,
+        sparkGravity: -15.0,
+
+        /** 6. The shards: the cold half, in two colours. */
+        shardsEnabled: true,
+        shards: 53,
+        shardColor: '#66f0ff',
+        shardColorAlt: '#e07dff',
+        shardSpeed: 13.5,
+        shardSize: 0.16,
+        shardLife: 0.95,
+        shardDrag: 2.4,
+        shardGravity: -9.0,
+
+        /** 7. The haze standing in for the air being torn. */
+        hazeEnabled: true,
+        haze: 11,
+        hazeColor: '#c9d6e4',
+        hazeOpacity: 0.56,
+        /** Metres across at birth, what it grows to, and how fast it climbs. */
+        hazeSize: 0.7,
+        hazeGrowth: 2.6,
+        hazeRise: 1.4,
+        hazeLife: 1.35,
+
+        /** The light the whole thing throws, and how far it reaches. */
+        light: 102.0,
+        lightRange: 13.5,
+        lightColor: '#7fd8ff'
+      }
+    },
+
+    /**
      * The bar over a body's head — see `vfx/HealthBars.js`.
      *
      * It belongs to the gun and to nothing else, which is why it is a block
@@ -1940,6 +2116,618 @@ export const settings = {
       /** What the column is worth at rest, and what the rune is worth gathering. */
       hold: 0.45,
       gather: 0.18
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* The crimson rite                                                    */
+  /* ------------------------------------------------------------------ */
+  /**
+   * The Crimson Rite (`V`) — `animation/Attack.js` and `vfx/CrimsonRite.js`.
+   *
+   * ## The move
+   *
+   * Mechanically it is the unmaking again: one press, one body locked, one
+   * cast clip, and two beats stated in `hits`. What is different is what
+   * happens *after* the second beat, and it is the only move in the project
+   * that does anything after its clip has finished.
+   *
+   *  - the first beat marks the body — the ground goes dark, ink stands up out
+   *    of it, and three katanas resolve out of that ink pointed inward. Nothing
+   *    is hurt and nothing is committed;
+   *  - the second beat lets them go. From there the clip has no further say:
+   *    `vfx/CrimsonRite.js` runs the three thrusts on a clock of its own, each
+   *    landing when its point actually arrives, and the tear-out that follows
+   *    them is a fourth impact with no frame in any animation behind it.
+   *
+   * That is the whole reason the timing lives in `beats` below rather than in
+   * `hits`. A clip can mark two frames; this move has four impacts.
+   *
+   * Like the unmaking it does not travel — `maxWarp: 0`, the body stays where
+   * the player pressed the key and only turns to face the mark. Nothing here is
+   * thrown from the hand, so there is nowhere to close to.
+   *
+   * ## What it costs the thing it lands on
+   *
+   * The three thrusts *wound* and are tuned so that three of them cannot take a
+   * body to zero — see `wound`. The rite has to keep its own victim alive for
+   * its own finish, exactly as the sword combo's opening cuts do. The tear-out
+   * then kills outright, and `unmake` below says how the body leaves: it is not
+   * a corpse to be dropped and burned in ember orange five seconds later, it is
+   * a body three blades came out of, and it goes where it stands.
+   *
+   * ## The look
+   *
+   * Six layers, and the reference is a five-panel breakdown of exactly this
+   * kind of effect. Each has an `enabled` of its own so it can be soloed
+   * against the other five; `vfx/CrimsonRite.js` explains what each is doing:
+   *
+   *  1. `trails`  — the strokes. `vfx/SlashTrails.js`, in two gestures.
+   *  2. `mist`    — blood, atomised and flung. `vfx/BloodMist.js`.
+   *  3. `rings`   — the floor. `vfx/RiteRings.js`.
+   *  4. `aura`    — the ink. `vfx/InkAura.js`.
+   *  5. `cinders` — the sparks. `vfx/CinderStreaks.js`.
+   *  6. `blades`  — the katanas. `vfx/PhantomBlades.js`.
+   *
+   * If only one number here is ever touched, make it `trails.tear`: it is how
+   * hard a stroke comes apart as it dies, and it is the whole difference
+   * between a cut and a glowing ribbon fading out.
+   */
+  crimsonRite: {
+    enabled: true,
+    /**
+     * Metres a body can be locked from.
+     *
+     * The same distance the beats state as their `reach`, and for the same
+     * reason the unmaking's are: nothing here crosses the ground, so the only
+     * honest range is how far the mark can be struck.
+     */
+    range: 11,
+    /** Full width of the search cone, degrees. */
+    cone: 96,
+    /** Inert while `maxWarp` is zero: there is no mark to stand off from. */
+    standoff: 2.2,
+    /**
+     * Ceiling on the approach, metres — and here it is *none*.
+     *
+     * Zero is the field doing its job rather than the field switched off:
+     * `Attack#_resolveWarp` clamps the step to it, so the destination resolves
+     * onto the spot the body already occupies and the warp still runs, still
+     * turning to face the mark. The rite is worked from where you stood.
+     */
+    maxWarp: 0,
+    /** Inert with no step in the warp, but stated so raising it works. */
+    warpFrom: 0,
+    warpAt: 0.24,
+    /** Square on well before the hands come down at 0.21. */
+    turnAt: 0.5,
+    /** Unused: `hits` names the contacts. Left at the frame the rite is let go. */
+    hitAt: 0.46,
+    /** Metres the *fallback* blow lands at. Both beats state their own. */
+    reach: 3.2,
+    /**
+     * Normalised time the stick is handed back.
+     *
+     * Earlier than the unmaking's, and deliberately: the player should get the
+     * body back while the blades are still working. The rite does not need the
+     * caster after it has been let go, and a character rooted for the whole of
+     * something they are only watching is the commonest way an ability of this
+     * length stops being fun.
+     */
+    recoverAt: 0.66,
+    /** 4.27 s of clip at 1.85 is 2.31, and the two beats fall 0.62 apart. */
+    timeScale: 1.85,
+    /** Seconds to fade the move over the gait, and back off it. */
+    blendIn: 0.12,
+    blendOut: 0.3,
+
+    /**
+     * The two beats the *clip* is responsible for, in clip-normalised time.
+     *
+     * Measured off the same hands the unmaking's are, because it is the same
+     * export: the frame the sweep closes, and the frame the arm drives out.
+     *
+     *  - `mark` strikes the ground and calls the blades up. It cannot hurt
+     *    anyone and it is not meant to.
+     *  - `rite` lets them go, and is the last thing the animation decides.
+     *
+     * `kind` is the one field `core/App.js` branches on.
+     */
+    hits: [
+      { at: 0.21, kind: 'mark', beat: 0, reach: 11 },
+      { at: 0.46, kind: 'rite', beat: 1, reach: 11 }
+    ],
+
+    /** Metres up the body the ring of blades is centred — chest height. */
+    height: 1.05,
+    /** How many thrusts. Three, which is the move. */
+    stabs: 3,
+
+    /**
+     * What one thrust costs.
+     *
+     * Three of these must not reach the health an enemy stands up with
+     * (`settings.gunplay.damage.health`, which is 100), or the rite kills its
+     * own victim before it can finish it — the same tuning the sword combo's
+     * `wound` needs, and for the same reason. Three at 28 leave a body on 16,
+     * which is a margin thin enough that the thrusts feel like they are doing
+     * something and wide enough that the tear-out always gets its turn.
+     *
+     * If one *does* finish a body that something else had worn down first, it
+     * falls by the ordinary path with this move's force and the rite tears out
+     * into the corpse — which reads perfectly well, and is far better than a
+     * rite that stalls.
+     */
+    wound: 28,
+
+    /**
+     * m/s along the blow, and straight up, given to the body it takes.
+     *
+     * Almost nothing along, and a real lift: three blades leaving in three
+     * directions have no net bearing between them. The body is pulled off its
+     * feet and burns away on the way up rather than being thrown anywhere.
+     */
+    impulse: 0.5,
+    lift: 2.4,
+    /** Upper body multiplier — enough to fold it over as it goes. */
+    spin: 1.6,
+    /** Seconds the world nearly stops as the blades come out, and how far down. */
+    hitStop: 0.13,
+    hitStopScale: 0.05,
+    /** Metres the lens is knocked by the tear-out — the attack's own shake. */
+    shake: 0.34,
+    /** And by each thrust. Much smaller: there are three of them. */
+    stabShake: 0.12,
+    /** The tear-out's, thrown from the rite rather than from the attack. */
+    rendShake: 0.4,
+    /** Nothing is cut here. The body is not parted, it is taken. */
+    slices: false,
+
+    /**
+     * How a body taken by this goes away — read by `combat/Enemy.js#die`.
+     *
+     * A fact about the *blow*, exactly as `slices` is: what killed it decides
+     * how it leaves. Every ordinary corpse lies there for
+     * `settings.enemies.corpseTime` and burns off in ember orange. One taken by
+     * the rite gets almost none of that lying about and burns crimson, from
+     * everywhere at once — `dissolveRise` is low because what is eating it is
+     * not fire climbing up it, it is three wounds opening at the same time.
+     *
+     * Setting it to null puts this move's kills back on the ordinary path,
+     * which is the useful thing to try if the burn is ever in question.
+     */
+    unmake: {
+      /** Seconds the body lies there first. Almost none: it is already going. */
+      corpseTime: 0.12,
+      /** And the seconds it takes to go, inside the rite's own settle. */
+      dissolveTime: 1.25,
+      /** The burn line, its heat and how wide a band it is. */
+      edgeColor: '#ff3a24',
+      edgeEmissive: 11.0,
+      edgeWidth: 0.2,
+      /** Eaten from everywhere at once rather than dipped in something. */
+      dissolveRise: 0.14
+    },
+
+    /**
+     * The choreography, in seconds — `vfx/CrimsonRite.js`.
+     *
+     * These are the move, far more than `hits` is: everything after the cast is
+     * paced here.
+     *
+     * `charge` is the only one that is not a pace, it is a **timeout**. The
+     * clip's second beat normally lets the blades go somewhere in the middle of
+     * it, and reaching the end means the rite lost what it was for — the body
+     * died to something else in between — so the ink sinks rather than three
+     * katanas stabbing grass. Keep it comfortably longer than the gap between
+     * the two beats (0.62 s at the pace above).
+     */
+    beats: {
+      /** The ink welling up and the blades resolving in it. */
+      mark: 0.42,
+      /** Held, gathering — and the fizzle timeout. See above. */
+      charge: 1.2,
+      /**
+       * Seconds between one thrust being *ordered* and the next.
+       *
+       * Not between landings: a thrust takes `blades.beats.thrust` to arrive,
+       * so the rhythm on screen is this plus that. At 0.19 and 0.13 the three
+       * points land about a fifth of a second apart, which is fast enough to
+       * read as one burst and slow enough to count.
+       */
+      between: 0.19,
+      /**
+       * How long the body is held on the points before they come out.
+       *
+       * The pause before the tear, and it is doing real work: without it the
+       * third thrust and the finish are one event and the move has three beats
+       * instead of four.
+       */
+      hold: 0.26,
+      /** The tear-out itself. */
+      rend: 0.55,
+      /** And the ink sinking back into the ground it came out of. */
+      settle: 0.85,
+      /**
+       * Seconds after which the rite tears out with whatever landed.
+       *
+       * A safety valve, not a pace. Everything between the cast and the finish
+       * depends on points *arriving*, and one that never does would leave the
+       * rite holding a body and its own key forever — so rather than trying to
+       * enumerate the ways that could happen, it gives up waiting. The normal
+       * path never reaches this: three thrusts ordered 0.19 apart, each taking
+       * 0.13 to land, are all in well inside a second. Raise it if `stabs` is
+       * ever set far above `blades.count`, since the thrusts then have to queue
+       * for a blade to come free.
+       */
+      abandon: 2.6
+    },
+
+    /** Master on the ring struck by each beat — the mark, a thrust, the tear. */
+    markRing: 0.55,
+    stabRing: 0.8,
+    rendRing: 1.15,
+    /** And on the cloud each of them throws. */
+    stabMist: 1.0,
+    rendMist: 2.1,
+
+    /**
+     * 1 · The strokes — `vfx/SlashTrails.js`.
+     *
+     * This block is what a stroke is *made of*, and it is shared by both
+     * gestures below so the move cannot come apart into two looks. `razor` and
+     * `tear` are the two that matter: the first is where the white line sits
+     * across the stroke, the second is how hard it shatters as it dies.
+     */
+    trails: {
+      enabled: true,
+      /** The white heat, the body of it, and the dark it fades into. */
+      coreColor: '#ffe3d8',
+      color: '#ff1f2d',
+      edgeColor: '#4a0308',
+      intensity: 1.3,
+      /**
+       * Where the white line sits across the stroke, 0 at the trailing edge and
+       * 1 at the leading one, and how wide it is.
+       *
+       * Deliberately not 1. A razor exactly on the leading edge reads as a
+       * glowing band with a lit border; a little inside it leaves a thin skin
+       * of crimson *ahead* of the white, and that skin is what the eye reads as
+       * an edge rather than as a tube.
+       */
+      razor: 0.84,
+      razorWidth: 0.055,
+      core: 0.45,
+      /** How hard the body falls away from the razor toward the tail. */
+      falloff: 1.0,
+      /** How pointed the ends are. Higher is a finer needle. */
+      tip: 0.55,
+      /** Fraction of its life the stroke is still being swept over. */
+      draw: 0.16,
+      headSoft: 0.09,
+      /** The bloom riding the front while it is being swept. */
+      headFlare: 1.1,
+      /** The tearing: how fine the pieces are, how fast they crawl, how much. */
+      detail: 3.6,
+      flow: 1.3,
+      tear: 0.85,
+      /** Filament splitting along the stroke — the hairs in the reference. */
+      hair: 26.0,
+      hairDepth: 0.45
+    },
+
+    /**
+     * The thrust's gesture: long, shallow, barely curved.
+     *
+     * A big radius with a small sweep is a piece of a very large circle, which
+     * is a nearly straight streak — which is what a thrust leaves. Everything
+     * about how it *looks* is `trails` above; these five numbers are all that
+     * separates it from the tear-out.
+     */
+    stabArc: {
+      count: 2,
+      /** Radians the fan is opened by, about the thrust's own line. */
+      spread: 0.5,
+      radius: 2.6,
+      sweep: 0.55,
+      width: 0.34,
+      life: 0.32,
+      /** Metres the arc is sheared forward, so it is not a flat hoop. */
+      pitch: 0.35,
+      strength: 0.8
+    },
+
+    /**
+     * The tear-out's: tight, wide and violent.
+     *
+     * A small radius with a large sweep is most of a circle — the crescents the
+     * reference's first panel is full of. Same look, opposite gesture, and that
+     * contrast is the cheapest way to make a finisher feel like a different
+     * kind of thing from the blows that set it up.
+     */
+    rendArc: {
+      count: 3,
+      spread: 0.85,
+      radius: 1.15,
+      sweep: 2.5,
+      width: 0.5,
+      life: 0.55,
+      pitch: 0.8,
+      strength: 1.1
+    },
+
+    /**
+     * 2 · The mist — `vfx/BloodMist.js`.
+     *
+     * Two kinds out of one system: `puffs` are the cloud, `drops` are what is
+     * flung out of it. The cloud is the only opaque thing in the whole ability
+     * and therefore the only source of weight in it — if the move ever feels
+     * like a light show, this is the block to raise.
+     */
+    mist: {
+      enabled: true,
+      /** The dark heart of it, the body, and the hot grains caught inside. */
+      deepColor: '#12000d',
+      color: '#6e0512',
+      hotColor: '#ff4326',
+      intensity: 1.0,
+      /** Shared: drag on everything, and the fall the drops actually feel. */
+      drag: 2.4,
+      gravity: -6.5,
+      /** The cloud: how many, how fast, how long, how big, how see-through. */
+      puffs: 26,
+      puffSpeed: 1.5,
+      puffRise: 0.55,
+      puffLife: 1.05,
+      size: 0.5,
+      grow: 2.3,
+      opacity: 0.72,
+      /** Metres back down the blade the cloud is born — a wound is behind a tip. */
+      setback: 0.28,
+      /** How ragged a puff's outline is, how fine, and how fast it churns. */
+      erode: 0.62,
+      detail: 2.6,
+      churn: 0.5,
+      /** The drops: how many, how fast, how long, how wide a cone. */
+      drops: 40,
+      dropSpeed: 6.5,
+      dropLife: 0.85,
+      spray: 0.8,
+      splatSize: 0.055,
+      /** How much of a drop's length comes from its own speed. */
+      splatStretch: 2.6,
+      /** How much heat is caught in the blood. Past about 1 it stops being wet. */
+      hot: 0.55
+    },
+
+    /**
+     * 3 · The floor — `vfx/RiteRings.js`.
+     *
+     * `rings` is the count in the train and `ringGap` is how far apart they are
+     * launched. Four at 0.11 is the reference's picture: several fronts at
+     * several radii on screen at once, which says *this is still happening*
+     * where a single ring only says something landed.
+     */
+    rings: {
+      enabled: true,
+      color: '#ff2a20',
+      coreColor: '#ffd8c8',
+      crackColor: '#ff5a1e',
+      scorchColor: '#0a0305',
+      intensity: 0.9,
+      /** Metres the outermost front reaches, and how long the disc lives. */
+      radius: 3.8,
+      life: 1.5,
+      /** The train: how many fronts, how far apart, and how much each loses. */
+      rings: 4,
+      ringGap: 0.11,
+      ringReach: 0.88,
+      /** Stroke weight of a front and its feather, in fractions of the radius. */
+      width: 0.018,
+      softness: 0.022,
+      /** The cracks: how many, how long, how wide, how hot. */
+      cracks: 14,
+      crackLength: 0.8,
+      crackWidth: 0.012,
+      crackGlow: 1.6,
+      /** The burn: how dark, how far out, and how much of the life it fades over. */
+      scorch: 0.85,
+      scorchRadius: 0.85,
+      scorchFade: 0.35,
+      /** Metres it stands off the floor, out of the ground's z-fight. */
+      lift: 0.035
+    },
+
+    /**
+     * 4 · The ink — `vfx/InkAura.js`.
+     *
+     * The only layer that subtracts. `threshold` is the control: it is where
+     * the ink is cut out of its noise field, so a low number is a fog bank and
+     * a high one is a few thin ribbons. Everything between is the aura.
+     */
+    aura: {
+      enabled: true,
+      /** Near-black, and the heat caught in the edges of it. */
+      inkColor: '#050205',
+      rimColor: '#8e0a14',
+      opacity: 0.7,
+      rim: 0.5,
+      /** Metres out the shell stands, and metres up it reaches. */
+      radius: 1.7,
+      height: 2.8,
+      /** Feature size, how fast the threads climb, and how hard they hook. */
+      scale: 1.5,
+      rise: 0.42,
+      warp: 0.75,
+      /** Where the ink is cut out of the field, and how sharp that cut is. */
+      threshold: 0.58,
+      sharpness: 0.2,
+      /** The lean at the top, its beat, and how fast the whole shell turns. */
+      curl: 0.4,
+      curlSpeed: 0.8,
+      swirl: 0.35
+    },
+
+    /**
+     * 5 · The cinders — `vfx/CinderStreaks.js`.
+     *
+     * `stretch` is the one that decides the whole character of the field: a
+     * cinder is drawn along the direction it is actually travelling, by an
+     * amount proportional to how fast it is going *now*, so one number gives
+     * the reference's mixture of long streaks and near-points.
+     */
+    cinders: {
+      enabled: true,
+      color: '#ff2f14',
+      coreColor: '#ffd6b4',
+      intensity: 1.5,
+      /** Shared: how fast they are thrown, how long they last, how they slow. */
+      speed: 7.0,
+      life: 0.9,
+      drag: 1.5,
+      gravity: -2.2,
+      /** The lift under an ember — these should not simply rain. */
+      rise: 1.1,
+      /** How big a cinder is before its speed stretches it, and by how much. */
+      size: 0.016,
+      stretch: 2.3,
+      maxStretch: 9.0,
+      /** The light around one, and the flicker each is on. */
+      halo: 0.5,
+      flicker: 0.4,
+      flickerSpeed: 22.0,
+      /** Shed off the steel by one thrust, in a cone about its line. */
+      stabCount: 24,
+      stabStrength: 1.0,
+      spread: 0.7,
+      /** Thrown in every direction by the tear-out. */
+      rendCount: 90,
+      rendStrength: 1.5,
+      rendRadius: 0.6,
+      /** And the slow drift out of the aura, for as long as there is one. */
+      drift: 26,
+      driftHeight: 0.2,
+      driftSpread: 0.9,
+      driftStrength: 0.32
+    },
+
+    /**
+     * 6 · The katanas — `vfx/PhantomBlades.js`.
+     *
+     * The character's own weapon, borrowed off the equipment library rather
+     * than modelled here. `length` is the only number that changes the mesh: it
+     * is what the piece is scaled to, end to end, and moving it rebuilds the
+     * blades.
+     */
+    blades: {
+      enabled: true,
+      /** How many come. Three, one per thrust. Six is the ceiling. */
+      count: 3,
+      /** Metres a summoned blade is, point to pommel. */
+      length: 1.45,
+      /**
+       * Which end of the measured piece is the point.
+       *
+       * The blade is found by taking the longest axis of its bounding box,
+       * which cannot say which *end* of that axis is the tip. The katana runs
+       * away from the guard down +Z, so the far end is; this is here for the
+       * day an export disagrees.
+       */
+      flip: false,
+      /** Metres out the ring of them hangs, and metres in they finish. */
+      standoff: 2.1,
+      bite: 0.22,
+      /** Metres apart in height, so three points are not a level diagram. */
+      spreadHeight: 0.42,
+      /** Seconds between one blade resolving out of the ink and the next. */
+      stagger: 0.09,
+      /** Metres further out a blade starts before it drifts to its mark. */
+      gatherDrift: 0.55,
+      /** Depth and beat of the hover while it waits. */
+      hover: 0.05,
+      hoverSpeed: 2.6,
+      /** Radians a second it turns about its own line, ± this. */
+      spin: 1.2,
+      /** The ring in the steel once it is in: how far, how fast, how it dies. */
+      quiver: 0.035,
+      quiverSpeed: 46.0,
+      quiverDecay: 9.0,
+      /** The tear-out: metres out the far side, how high, how curved. */
+      throughDistance: 3.2,
+      throughLift: 1.5,
+      throughArc: 0.7,
+      /** Radians it rolls about its own line on the way out. */
+      throughRoll: 3.2,
+      /** m/s a banished blade drifts up as it burns off. */
+      fadeRise: 0.7,
+
+      /** Seconds each state of one blade takes — see `vfx/PhantomBlades.js`. */
+      beats: {
+        /** Resolving out of the ink, point first. */
+        gather: 0.3,
+        /**
+         * The thrust.
+         *
+         * Under about a tenth of a second and the blade teleports; much over a
+         * fifth and it is being pushed rather than driven.
+         */
+        thrust: 0.13,
+        /** Coming out the far side. */
+        wrench: 0.45,
+        /** And burning off, for one that never got used. */
+        fade: 0.4
+      },
+
+      /** The steel: near-black, the sheen on it, and the crimson round it. */
+      bodyColor: '#0b0709',
+      sheenColor: '#b04a4a',
+      rimColor: '#ff2436',
+      rim: 2.4,
+      rimPower: 2.6,
+      /** The burn that puts it there and takes it away. */
+      edgeColor: '#ff7038',
+      edgeEmissive: 8.0,
+      edgeWidth: 0.14,
+      /**
+       * Features per metre in the burn's mask.
+       *
+       * High, and it has to be: a blade is three centimetres across, so
+       * anything under about twenty features per metre puts less than a blob
+       * across its width and the mask reads as the blade being cut in half
+       * rather than as it coming apart. The same problem `settings.weapons.detail`
+       * solves, at the same kind of number.
+       */
+      detail: 34.0,
+      /**
+       * How much of the burn runs along the piece rather than being pure static.
+       *
+       * 1 is a clean line travelling from the point to the pommel; 0 is noise
+       * eating it from everywhere at once. High here, because a summoned blade
+       * should arrive *point first* — that is what makes it read as being drawn
+       * out of the dark rather than switched on.
+       */
+      burnRise: 0.62,
+      /** The energy crawling up the steel, and how fast. */
+      veins: 0.55,
+      veinFlow: 1.6
+    },
+
+    /**
+     * The one light the whole rite shares.
+     *
+     * Three strengths, one per kind of event, and the brightest wins — a stray
+     * thrust must not drag the glow back off a tear-out that is still burning.
+     */
+    light: {
+      color: '#ff3020',
+      intensity: 13.0,
+      range: 14.0,
+      /** Seconds a flash takes to fall away. */
+      decay: 0.34,
+      /** What each event is worth, as a fraction of the intensity above. */
+      mark: 0.35,
+      stab: 0.8,
+      rend: 1.0
     }
   },
 

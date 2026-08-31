@@ -3,9 +3,10 @@ import { Box3, Group, MathUtils, Matrix4, Raycaster, Vector2, Vector3 } from 'th
 import { settings } from '../config/settings.js';
 import { isRanged } from '../equipment/EquipmentCatalog.js';
 import { Crosshair } from '../ui/Crosshair.js';
+import { FocusedBurst } from '../vfx/FocusedBurst.js';
 import { ImpactSparks, MuzzleFlash } from '../vfx/GunFX.js';
 import { nearestBody } from './Hitboxes.js';
-import { Projectiles } from './Projectiles.js';
+import { FOCUSED, ORDINARY, Projectiles } from './Projectiles.js';
 
 /** The middle of the screen, in NDC. The reticle is nailed to it. */
 const CENTRE = /* @__PURE__ */ new Vector2(0, 0);
@@ -80,6 +81,21 @@ const _corner = /* @__PURE__ */ new Box3();
  * Nothing here answers while the pointer is free. The press that takes it is
  * spent on taking it, and the mode waits: a click that both focuses the window
  * and empties a magazine is how a player loses one to an alt-tab.
+ *
+ * ## The held shot
+ *
+ * One thing the right button does that is not the sights. Held for
+ * `settings.gunplay.focus.charge` seconds with the feet planted and the trigger
+ * untouched, a bar fills under the reticle, and the release that would
+ * ordinarily just drop the sights sends a single round instead — no cone on it
+ * at all, and whatever it lands on is taken apart by `vfx/FocusedBurst.js`.
+ *
+ * It is deliberately built out of the state that was already here rather than
+ * out of a fourth button: the gesture a player makes to take a careful shot is
+ * *already* holding the sights and standing still, and the only thing this adds
+ * is that doing it for three seconds is worth something. Every one of the three
+ * conditions that hold the charge is a condition the ordinary shot already
+ * cares about, so there is nothing new to learn and nothing new to bind.
  */
 export class Gunplay {
   /**
@@ -136,7 +152,16 @@ export class Gunplay {
     this.projectiles = new Projectiles({ terrain });
     this.sparks = new ImpactSparks();
     this.flash = new MuzzleFlash();
-    this.group.add(this.projectiles.mesh, this.sparks.points, this.flash.group);
+    // What the held shot leaves where it lands. Handed the height field because
+    // the cracks it writes are struck into the *ground* under the contact and a
+    // web four metres across on a slope has to lie on it.
+    this.burst = new FocusedBurst({ terrain });
+    this.group.add(
+      this.projectiles.mesh,
+      this.sparks.points,
+      this.flash.group,
+      this.burst.group
+    );
 
     this.crosshair = new Crosshair();
     this.raycaster = new Raycaster();
@@ -166,6 +191,30 @@ export class Gunplay {
     this._pressed = false;
     /** Which buttons were down at the last pointer event, as a `buttons` mask. */
     this._buttons = 0;
+
+    /**
+     * Seconds of held sights banked toward the focused shot.
+     *
+     * Runs past `focus.charge` rather than stopping at it, so `focus.hold` has
+     * something to measure — see `_advanceCharge`.
+     */
+    this._charge = 0;
+    /**
+     * One buffered release, on exactly the terms `_pressed` buffers a press.
+     *
+     * The release of a full bar is an *edge*, and an edge can fall down the gap
+     * between two frames. A player who earned the shot and let go inside one
+     * long frame would otherwise have spent three seconds on nothing, which is
+     * a worse thing for a gun to do than dropping an ordinary round.
+     */
+    this._release = false;
+
+    /**
+     * The blow the blast hands a ragdoll, rebuilt in place per body caught
+     * rather than allocated — a burst that felled four of them is four
+     * allocations on the one frame that cannot afford any.
+     */
+    this._blastForce = { impulse: 0, lift: 0, spin: 0, slices: false };
 
     /** The rifle model the muzzle was last measured on, and where it came out. */
     this._muzzleModel = null;
@@ -252,6 +301,41 @@ export class Gunplay {
     return this.active && this._sights;
   }
 
+  /**
+   * Whether the conditions of the held shot are all in force.
+   *
+   * The sights up, the feet planted, the trigger up, and nothing else holding
+   * the body. Any one of them breaking empties the bar outright rather than
+   * pausing it — a charge that could be parked and picked up again is not a
+   * held breath, it is a resource, and this is meant to cost the player the one
+   * thing a shooter actually values: standing still, in the open, for three
+   * seconds.
+   *
+   * The trigger is read as *held* rather than as rounds fired, because between
+   * two rounds of an automatic burst there is a tenth of a second in which no
+   * round is leaving — and a bar that crept up a percent in every one of those
+   * gaps would be a bar flickering under the reticle for the whole magazine.
+   */
+  get holding() {
+    if (!this.active || !this._sights || !this.steady) return false;
+    if (this._trigger || this._pressed) return false;
+    for (const move of this.character.attacks ?? []) {
+      if (move.locked) return false;
+    }
+    return true;
+  }
+
+  /** How much of the charge has been served, 0..1. What the bar draws. */
+  get charge() {
+    const wanted = Math.max(0.05, settings.gunplay.focus.charge);
+    return MathUtils.clamp(this._charge / wanted, 0, 1);
+  }
+
+  /** Whether the bar is full and the release would send the round. */
+  get charged() {
+    return settings.gunplay.focus.enabled && this._charge >= settings.gunplay.focus.charge;
+  }
+
   /** Which shoulder the lens is over, as the settings hold it. */
   get shoulder() {
     return settings.gunplay.shoulder < 0 ? 'left' : 'right';
@@ -279,6 +363,11 @@ export class Gunplay {
     this._trigger = false;
     this._pressed = false;
     this._sights = false;
+    // The charge goes with the sights, and the buffered release with it: a bar
+    // filled before the pointer was handed back must not fire the moment it
+    // comes back, at a target the player has not looked at since.
+    this._charge = 0;
+    this._release = false;
   }
 
   /* ------------------------------------------------------------------ */
@@ -366,28 +455,43 @@ export class Gunplay {
   update(dt, raw) {
     const live = this.active;
 
+    // Before anything can land, so a burst opened by a round arriving later in
+    // this same frame is stamped with a clock its own shaders already agree
+    // with — see `vfx/FocusedBurst.js#sync`.
+    this.burst.sync(dt);
+
     if (live) {
       // The pose was written by `character.update`; the mounts were scaled
       // after it. This is the frame's final answer to where the gun is.
       this.character.root.updateMatrixWorld(true);
       this._advanceSpread(dt);
+      this._advanceCharge(dt);
       this._pullTrigger();
+      this._releaseFocus();
     } else {
       this._trigger = false;
       // And anything buffered goes with it: a press taken while the gun was
-      // still out must not go off the next time it is drawn.
+      // still out must not go off the next time it is drawn. The charge is in
+      // that list — three seconds banked before a holster are not three seconds
+      // the next draw inherits.
       this._pressed = false;
+      this._charge = 0;
+      this._release = false;
       this._bloom = 0;
     }
 
     // Rounds already in the air are advanced whatever the gun is doing: putting
     // the rifle away does not un-fire them.
     this.projectiles.update(dt, this.enemies.enemies, {
-      onBody: (enemy, point, direction, head) => this._hitBody(enemy, point, direction, head),
-      onGround: (point, direction) => this.sparks.burst(point, direction)
+      onBody: (enemy, point, direction, head, kind) =>
+        this._hitBody(enemy, point, direction, head, kind),
+      onGround: (point, direction, kind) => this._hitGround(point, direction, kind)
     });
     this.sparks.update(dt);
     this.flash.update(raw, this.camera);
+    // After the rounds, so a burst opened by one of them this frame is placed
+    // and lit on the frame it opened rather than on the one after.
+    this.burst.update(this.camera, settings.gunplay.focus.burst);
 
     this._drawReticle(live, raw);
   }
@@ -553,6 +657,11 @@ export class Gunplay {
     // has to come back up before another round will leave.
     if (!fire.auto) this._trigger = false;
     this._cooldown = 1 / Math.max(0.5, fire.rate);
+    // And the held shot is off. The charge is a breath held, and a round fired
+    // in the middle of one is the breath let go — the rule costs nothing to
+    // learn, because a player who fires while charging finds out on the frame
+    // they do it and every shooter alive already expects it.
+    this._charge = 0;
 
     if (!this._resolveMuzzle(_muzzle, _barrel)) return;
 
@@ -609,6 +718,160 @@ export class Gunplay {
       .addScaledVector(_bitangent, Math.cos(angle) * radius)
       .addScaledVector(_tangent, Math.sin(angle) * radius)
       .normalize();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* the held shot                                                       */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Bank a frame of held aim, or throw the lot away.
+   *
+   * There is no decay and there is no partial credit: the bar either fills or
+   * it empties. A charge that drained smoothly would be the kinder rule and it
+   * would also be the one that makes the shot *cheaper* — a player could serve
+   * two of the three seconds, take a step, and serve the rest, which is not the
+   * thing being asked for. What is being asked for is three seconds of standing
+   * still, and the only honest way to price that is to make an interruption
+   * cost all of it.
+   */
+  _advanceCharge(dt) {
+    const focus = settings.gunplay.focus;
+    if (!focus.enabled || !this.holding) {
+      this._charge = 0;
+      return;
+    }
+
+    this._charge += dt;
+
+    // The window, when there is one. Past `charge + hold` the shot lapses and
+    // the bar starts again, so a player who earned it and then wandered off
+    // does not come back to a loaded gun. At `hold` 0 there is no window: the
+    // offer stands for as long as the button is down, which is the default and
+    // the kinder rule of the two.
+    const window = Math.max(0, focus.hold);
+    if (window <= 0) {
+      this._charge = Math.min(this._charge, focus.charge);
+      return;
+    }
+    if (this._charge >= focus.charge + window) this._charge = 0;
+  }
+
+  /** Spend the buffered release, if there is one to spend. */
+  _releaseFocus() {
+    const release = this._release;
+    this._release = false;
+    if (release) this._fireFocused();
+  }
+
+  /**
+   * The one round the three seconds bought.
+   *
+   * Everything the ordinary trigger does, minus the one thing that makes it a
+   * gun rather than a promise: there is no `_scatter` call. The spread is not
+   * *reduced* for this shot, it does not exist — the round leaves on the exact
+   * line from the muzzle to where the reticle landed, which is the whole thing
+   * the player stood still for.
+   */
+  _fireFocused() {
+    const focus = settings.gunplay.focus;
+    // Spent whether or not it can be answered, exactly as a buffered press is:
+    // a shot refused because a kick landed must not go off a second later.
+    this._charge = 0;
+    if (!focus.enabled) return;
+
+    for (const move of this.character.attacks ?? []) {
+      if (move.locked) return;
+    }
+    if (!this.steady) return;
+    if (!this._resolveMuzzle(_muzzle, _barrel)) return;
+
+    _shot.copy(this.aimPoint).sub(_muzzle);
+    const view = this.raycaster.ray.direction;
+    if (_shot.lengthSq() < 0.25 || _shot.dot(view) <= 0) _shot.copy(view);
+    _shot.normalize();
+
+    this.projectiles.fire(_muzzle, _shot, focus.speed, FOCUSED);
+    this.flash.flash(_muzzle, _barrel);
+    this.character.rifle?.shoot();
+
+    // A far heavier kick than a round of the burst, and no bloom: the gun is
+    // not left worse for having fired this, because there is no follow-up shot
+    // for a bloom to spoil — the next one is three seconds away.
+    this.rig.punch(
+      MathUtils.degToRad(focus.recoilPitch),
+      MathUtils.degToRad(focus.recoilYaw) * (Math.random() * 2 - 1)
+    );
+    this.rig.shake(focus.shake);
+    // The ordinary trigger is held off for one round's worth of time, so a
+    // player holding both buttons does not get the burst back on the same frame
+    // the held round leaves.
+    this._cooldown = Math.max(this._cooldown, 1 / Math.max(0.5, settings.gunplay.fire.rate));
+  }
+
+  /**
+   * The held round arriving — wherever it arrived.
+   *
+   * The burst, the knock, the freeze and the blast, in that order, and nothing
+   * here cares whether there was a body under it: a round that landed in the
+   * dirt beside someone still went off, and it still catches them.
+   *
+   * @param {Vector3} point where it stopped
+   * @param {Vector3} direction the way it was going
+   * @param {object|null} [spare] a body already spent on the direct hit — it
+   *   cannot be caught by the blast as well, or the round is worth its own
+   *   damage twice against the one target it actually hit
+   */
+  _detonate(point, direction, spare = null) {
+    const focus = settings.gunplay.focus;
+    this.burst.fire(point, direction, focus.burst);
+    this.rig.shake(focus.blastShake);
+    this.onHitStop?.(focus.hitStop, focus.hitStopScale);
+    this._blast(point, spare);
+  }
+
+  /**
+   * What the blast is worth to everyone standing near it.
+   *
+   * Measured to the middle of a body rather than to its feet, because a burst
+   * that went off at chest height a metre away is one metre from the body it
+   * caught and not two — and the falloff is linear, because the player has to
+   * be able to look at a group and guess who is inside it.
+   */
+  _blast(point, spare) {
+    const focus = settings.gunplay.focus;
+    const radius = Math.max(0, focus.blastRadius);
+    if (radius <= 0 || focus.blastDamage <= 0) return;
+
+    const lift = Math.max(0, settings.enemies.height) * 0.5;
+
+    for (const enemy of this.enemies.enemies) {
+      if (!enemy.alive || enemy === spare) continue;
+
+      const position = enemy.position;
+      const dx = position.x - point.x;
+      const dy = position.y + lift - point.y;
+      const dz = position.z - point.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance >= radius) continue;
+
+      const share = 1 - distance / radius;
+      const result = enemy.wound(Math.max(1, focus.blastDamage * share));
+      if (result !== 'down') continue;
+
+      // Thrown outward, and straight up for anything standing exactly on the
+      // point — a body with no direction to be thrown in still has to go
+      // somewhere, and up is the only answer that is never wrong.
+      _tangent.set(dx, 0, dz);
+      const flat = _tangent.length();
+      if (flat < 1e-4) _tangent.set(0, 0, 1);
+      else _tangent.multiplyScalar(1 / flat);
+
+      this._blastForce.impulse = focus.impulse * share;
+      this._blastForce.lift = focus.lift * share;
+      this._blastForce.spin = focus.spin * share;
+      this.enemies.kill(enemy, _tangent.x, _tangent.z, this._blastForce);
+    }
   }
 
   /**
@@ -706,10 +969,33 @@ export class Gunplay {
    * Three in the chest or one above the collar, which is `settings.gunplay
    * .damage` and not a rule written here: the body is told what the round was
    * worth and hands back whether that was the last of it.
+   *
+   * The held round takes the same path with two differences and no third: it is
+   * worth `focus.damage` rather than `damage.body`, and it goes off where it
+   * stopped. Everything after that — the blood, the ragdoll, the mark on the
+   * reticle — is the same code, because a round arriving is a round arriving.
+   *
+   * @param {number} [kind] `ORDINARY` or `FOCUSED`, from the pool
    */
-  _hitBody(enemy, point, direction, head) {
+  _hitBody(enemy, point, direction, head, kind = ORDINARY) {
     const damage = settings.gunplay.damage;
-    const result = enemy.wound(head ? damage.head : damage.body);
+    const focus = settings.gunplay.focus;
+    const focused = kind === FOCUSED;
+
+    const worth = focused
+      ? head
+        ? focus.headDamage
+        : focus.damage
+      : head
+        ? damage.head
+        : damage.body;
+    const result = enemy.wound(worth);
+
+    // The burst first, and whatever the wound came back with — a held round
+    // that arrived a frame after something else took the body down still
+    // arrived, and a shot that visibly hit and did nothing at all is the one
+    // thing three seconds of aim cannot be allowed to buy.
+    if (focused) this._detonate(point, direction, enemy);
     if (!result) return;
 
     // Out of the wound the way the round was going, lifted a little — a spray
@@ -731,13 +1017,16 @@ export class Gunplay {
     // The blow the ragdoll is handed. A rifle does not take a body apart, so
     // `slices` is false and the corpse goes down whole — the cut belongs to the
     // sword, and a round that halved someone would say the wrong thing about
-    // both weapons.
-    const force = {
-      impulse: head ? damage.headImpulse : damage.impulse,
-      lift: head ? damage.headLift : damage.lift,
-      spin: head ? damage.headSpin : damage.spin,
-      slices: false
-    };
+    // both weapons. The held round shoves far harder, which is the one place
+    // its weight is visible after the light has gone.
+    const force = focused
+      ? { impulse: focus.impulse, lift: focus.lift, spin: focus.spin, slices: false }
+      : {
+          impulse: head ? damage.headImpulse : damage.impulse,
+          lift: head ? damage.headLift : damage.lift,
+          spin: head ? damage.headSpin : damage.spin,
+          slices: false
+        };
 
     _tangent.set(direction.x, 0, direction.z);
     const flat = _tangent.length();
@@ -746,9 +1035,29 @@ export class Gunplay {
 
     if (!this.enemies.kill(enemy, _tangent.x, _tangent.z, force)) return;
 
-    this.rig.shake(damage.killShake);
-    this.onHitStop?.(damage.killHitStop, damage.killHitStopScale);
+    // The held round has already knocked the lens and frozen the world on its
+    // own terms (`_detonate`); doing it twice on the same frame would stack two
+    // hit-stops into one long stutter.
+    if (!focused) {
+      this.rig.shake(damage.killShake);
+      this.onHitStop?.(damage.killHitStop, damage.killHitStopScale);
+    }
     this.crosshair.hit(true);
+  }
+
+  /**
+   * A round reached the floor.
+   *
+   * An ordinary one throws a handful of sparks off it and is finished. A held
+   * one opens where it landed, and the sparks go with it — the burst has a
+   * shower of its own and the impact's dozen would be lost inside it.
+   */
+  _hitGround(point, direction, kind = ORDINARY) {
+    if (kind === FOCUSED) {
+      this._detonate(point, direction);
+      return;
+    }
+    this.sparks.burst(point, direction);
   }
 
   /* ------------------------------------------------------------------ */
@@ -781,6 +1090,9 @@ export class Gunplay {
     const aiming = live && ready;
     this.crosshair.show(aiming);
     this.crosshair.setBlocked(!ready);
+    // Before the early-out, so a bar on screen leaves on the frame the player
+    // takes the step that emptied it rather than being frozen where it was.
+    this.crosshair.setCharge(this.charge, this._charge > 0);
     this.crosshair.update(raw);
     if (!aiming) return;
 
@@ -854,7 +1166,14 @@ export class Gunplay {
         this.swapShoulder();
       }
 
-      this._sights = Boolean(now & RIGHT);
+      // The sights, and the one edge on this button that means something else.
+      // A right button that comes up on a full bar is not the sights coming
+      // down, it is the shot being taken — latched here rather than read off
+      // `_sights` in the frame loop, because the state is gone by the time the
+      // loop next runs and the edge is the whole event.
+      const sights = Boolean(now & RIGHT);
+      if (this._sights && !sights && this.charged) this._release = true;
+      this._sights = sights;
 
       if (down & LEFT) {
         this._trigger = true;
@@ -916,6 +1235,7 @@ export class Gunplay {
     this.projectiles.dispose();
     this.sparks.dispose();
     this.flash.dispose();
+    this.burst.dispose();
     this.group.parent?.remove(this.group);
   }
 }

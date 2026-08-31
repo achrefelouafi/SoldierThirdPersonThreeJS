@@ -30,6 +30,7 @@ import { ShadowBoost } from '../vfx/ShadowBoost.js';
 import { ShadowDash } from '../vfx/ShadowDash.js';
 import { SwordCombo } from '../vfx/SwordCombo.js';
 import { RunicBeam } from '../vfx/RunicBeam.js';
+import { CrimsonRite } from '../vfx/CrimsonRite.js';
 import { TargetRings } from '../vfx/TargetRings.js';
 import { HealthBars } from '../vfx/HealthBars.js';
 import { CharacterScreen } from '../screens/CharacterScreen.js';
@@ -273,6 +274,29 @@ export class App {
     // circle three metres across on a slope has to lie on it.
     this.runicBeam = new RunicBeam({ terrain: this.terrain });
     this.scene.add(this.runicBeam.group);
+
+    // And the crimson rite (`V`) — dressing for an ordinary attack again, on
+    // the same terms as the two above. It wants the height field for the same
+    // reason the beam does: the ink and the shock rings are struck into the
+    // *ground* under a body rather than hung over one.
+    //
+    // Two things here are unlike anything else in the frame loop. The first is
+    // `blade`: the rite borrows the katana off the equipment library, which
+    // does not exist until `load()` has built the character screen — so it is a
+    // provider, asked on the first cast, exactly as the gun asks for its
+    // loadout. The second is that this is the only move whose blows are *not*
+    // all frames in a clip: the clip marks two, and the three thrusts and the
+    // tear-out happen on the rite's own clock afterwards. Those four come back
+    // through `onStab` and `onRend`, which land on the same two paths every
+    // other attack goes through.
+    this.crimsonRite = new CrimsonRite({
+      terrain: this.terrain,
+      blade: () => this.characterScreen?.equipment?.get('sword')?.model ?? null,
+      onStab: (enemy, x, z) => this._onRiteStab(enemy, x, z),
+      onRend: (enemy, x, z) => this._onStrike(enemy, x, z, settings.crimsonRite),
+      onShake: (metres) => this.rig.shake(metres)
+    });
+    this.scene.add(this.crimsonRite.group);
 
     // The shooter. Dormant until the rifle is the weapon in the hand, and from
     // that moment it owns four things nothing else does: where the lens sits,
@@ -635,6 +659,11 @@ export class App {
     // that does not exist on the set, and a column of void standing in an
     // equipment studio is not a look anybody asked for.
     this.runicBeam.dismiss({ immediate: true });
+    // And the rite, which is the same case three times over: ink standing in
+    // ground the set does not have, shock rings on a floor that is not there,
+    // and three katanas hanging in the air where the body they were called
+    // against used to be.
+    this.crimsonRite.dismiss({ immediate: true });
     // And the rifle's own layers, which are the one thing on the body that is
     // not driven from the frame loop's play branch: the studio has its own
     // update path, so a torso left twisted toward a reticle in another scene
@@ -793,6 +822,24 @@ export class App {
       this.runicBeam.fire(enemy);
     }
 
+    // The rite's first beat, and the second thing in the game that reaches a
+    // body and costs it nothing: the ink and the blades are a promise, exactly
+    // as the rune is.
+    if (beat?.kind === 'mark') {
+      this.crimsonRite.mark(enemy);
+      return;
+    }
+
+    // And its second — the last thing the *clip* decides about this move. From
+    // here the rite runs on its own clock: three thrusts and a tear-out, each
+    // landing when it lands and each reporting back through `onStab` or
+    // `onRend`. So this returns rather than falling through to `_onStrike`
+    // below, because nothing has been hit yet.
+    if (beat?.kind === 'rite') {
+      this.crimsonRite.cast(enemy);
+      return;
+    }
+
     // The finisher, and every other move in the game: the body goes down here.
     // The rift opens *before* the kill so it is centred on a body that is still
     // standing — a corpse's position is the ragdoll's, and by the next frame it
@@ -831,6 +878,29 @@ export class App {
     if (!enemy?.alive) return;
 
     this.rig.shake(config.woundShake);
+    if (enemy.wound(config.wound) !== 'down') return;
+    this._onStrike(enemy, x, z, config);
+  }
+
+  /**
+   * A summoned point reached a body that is still standing.
+   *
+   * The same shape as `_onComboWound` and for the same reason: this is a blow
+   * on the way to a finisher, and the body has to still be there for it. So it
+   * spends health and that is all — the lens is knocked by the rite itself
+   * (`onShake`) rather than here, and there is deliberately no hit-stop,
+   * because freezing the world three times on the way to a fourth blow would
+   * make one move feel like four.
+   *
+   * `settings.crimsonRite.wound` is tuned so three of these cannot take a full
+   * body to zero. If something else has already worn it down far enough that
+   * one of them does finish it, it falls with the rite's own force — the same
+   * path the tear-out takes, so the corpse never leaves differently depending
+   * on which thrust happened to be the last one.
+   */
+  _onRiteStab(enemy, x, z) {
+    const config = settings.crimsonRite;
+    if (!enemy?.alive) return;
     if (enemy.wound(config.wound) !== 'down') return;
     this._onStrike(enemy, x, z, config);
   }
@@ -1283,6 +1353,14 @@ export class App {
     // stands in, and the body burning away inside it is on that clock too, so
     // the two have to slow together or the column outlives what it was for.
     this.runicBeam.update(dt, this.elapsed);
+    // And the rite, on the same clock once more — and it is the one that most
+    // needs to be: it *causes* the hit-stop its own tear-out stands in, and the
+    // body burning away inside it is on that clock too. It is also the only
+    // thing in this list that can deal a blow from inside its own update, which
+    // is exactly why it is here rather than anywhere else: by this line the
+    // enemies have already been stepped, so a point that arrives this frame
+    // meets a body that is where it says it is.
+    this.crimsonRite.update(dt, this.elapsed);
 
     // After everything that could have taken the body, so a chip lights on the
     // frame the move it names actually starts.
@@ -1326,6 +1404,7 @@ export class App {
     this.swordCombo.dispose();
     this.shadowDash.dispose();
     this.runicBeam.dispose();
+    this.crimsonRite.dispose();
     this.targetRings.dispose();
     this.targetHotkeys.dispose();
     this.healthBars.dispose();

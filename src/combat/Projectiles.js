@@ -15,6 +15,18 @@ import { sweepBodies } from './Hitboxes.js';
 
 const FORWARD = /* @__PURE__ */ new Vector3(0, 0, 1);
 
+/**
+ * What kind of round is in the air.
+ *
+ * The pool does not know what either one is *worth* — that is
+ * `combat/Gunplay.js`'s, like everything else about what a hit means. What it
+ * knows is the two facts it needs to draw and move one: a held round falls at
+ * its own rate and is drawn several times heavier, because a shot that took
+ * three seconds to earn must be visible leaving the barrel.
+ */
+export const ORDINARY = 0;
+export const FOCUSED = 1;
+
 const _from = /* @__PURE__ */ new Vector3();
 const _to = /* @__PURE__ */ new Vector3();
 const _step = /* @__PURE__ */ new Vector3();
@@ -76,6 +88,8 @@ export class Projectiles {
     this.vz = new Float32Array(capacity);
     this.age = new Float32Array(capacity);
     this.live = new Uint8Array(capacity);
+    /** `ORDINARY` or `FOCUSED`, per round. */
+    this.kind = new Uint8Array(capacity);
 
     this._next = 0;
     /** How many are in the air, for the HUD and for an early-out. */
@@ -111,8 +125,9 @@ export class Projectiles {
    * @param {Vector3} origin the muzzle
    * @param {Vector3} direction unit, spread already applied
    * @param {number} [speed] m/s — the settings' own unless overridden
+   * @param {number} [kind] `ORDINARY` or `FOCUSED`
    */
-  fire(origin, direction, speed = settings.gunplay.fire.speed) {
+  fire(origin, direction, speed = settings.gunplay.fire.speed, kind = ORDINARY) {
     // The ring rather than a search: a slot still in flight is the oldest round
     // on the field, and dropping it is the right thing to lose.
     const i = this._next;
@@ -126,6 +141,7 @@ export class Projectiles {
     this.vz[i] = direction.z * speed;
     this.age[i] = 0;
     this.live[i] = 1;
+    this.kind[i] = kind;
     return i;
   }
 
@@ -139,6 +155,7 @@ export class Projectiles {
   update(dt, enemies, hooks = {}) {
     const config = settings.gunplay;
     const tracer = config.tracer;
+    const focus = config.focus;
     const drop = config.fire.drop;
     const life = Math.max(0.05, tracer.life);
 
@@ -147,9 +164,11 @@ export class Projectiles {
     for (let i = 0; i < this.capacity; i++) {
       if (!this.live[i]) continue;
 
+      const focused = this.kind[i] === FOCUSED;
+
       if (dt > 0) {
         this.age[i] += dt;
-        this.vy[i] -= drop * dt;
+        this.vy[i] -= (focused ? focus.drop : drop) * dt;
 
         _from.set(this.px[i], this.py[i], this.pz[i]);
         _step.set(this.vx[i] * dt, this.vy[i] * dt, this.vz[i] * dt);
@@ -163,7 +182,7 @@ export class Projectiles {
         if (body && (!ground || body.distance <= ground)) {
           _direction.copy(_step).normalize();
           _point.copy(_from).addScaledVector(_direction, body.distance);
-          hooks.onBody?.(body.enemy, _point, _direction, body.head);
+          hooks.onBody?.(body.enemy, _point, _direction, body.head, this.kind[i]);
           this.live[i] = 0;
           continue;
         }
@@ -171,7 +190,7 @@ export class Projectiles {
         if (ground !== null) {
           _direction.copy(_step).normalize();
           _point.copy(_from).addScaledVector(_direction, ground);
-          hooks.onGround?.(_point, _direction);
+          hooks.onGround?.(_point, _direction, this.kind[i]);
           this.live[i] = 0;
           continue;
         }
@@ -186,7 +205,7 @@ export class Projectiles {
         }
       }
 
-      drawn = this._draw(i, drawn, tracer);
+      drawn = this._draw(i, drawn, tracer, focused ? Math.max(1, focus.tracer) : 1);
     }
 
     this.count = drawn;
@@ -230,23 +249,33 @@ export class Projectiles {
     return from.distanceTo(to) * (low + high) * 0.5;
   }
 
-  /** Lay one instance down as a streak behind the round. @returns the next slot */
-  _draw(i, slot, tracer) {
+  /**
+   * Lay one instance down as a streak behind the round.
+   *
+   * @param {number} scale what the tracer is multiplied by — 1 for an ordinary
+   *   round and `focus.tracer` for a held one. There is one material for the
+   *   whole pool, so a round cannot be given its own *colour*; what it can be
+   *   given is size, and at three and a half times the width that is enough to
+   *   pick the shot out of a burst.
+   * @returns the next slot
+   */
+  _draw(i, slot, tracer, scale) {
     _direction.set(this.vx[i], this.vy[i], this.vz[i]);
     const speed = _direction.length();
     if (speed < 1e-4) return slot;
     _direction.multiplyScalar(1 / speed);
 
+    const width = tracer.width * scale;
     // A young round has not travelled far enough to have a full streak behind
     // it, and one drawn at full length would be sticking out of the barrel
     // before it had left it.
-    const length = Math.min(tracer.length, speed * this.age[i] + tracer.width);
+    const length = Math.min(tracer.length * scale, speed * this.age[i] + width);
     _tail
       .set(this.px[i], this.py[i], this.pz[i])
       .addScaledVector(_direction, -length * 0.5);
 
     _quaternion.setFromUnitVectors(FORWARD, _direction);
-    _scale.set(tracer.width, tracer.width, length);
+    _scale.set(width, width, length);
     _matrix.compose(_tail, _quaternion, _scale);
     this.mesh.setMatrixAt(slot, _matrix);
     return slot + 1;
@@ -255,6 +284,7 @@ export class Projectiles {
   /** Take everything in the air back — for a field that has just been cleared. */
   clear() {
     this.live.fill(0);
+    this.kind.fill(ORDINARY);
     this.count = 0;
     this.mesh.count = 0;
   }

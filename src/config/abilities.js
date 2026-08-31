@@ -182,6 +182,21 @@ export const ABILITIES = [
     attack: true
   },
   {
+    id: 'crimsonRite',
+    category: 'ability',
+    label: 'Crimson Rite',
+    // The next free cap on the bottom row, beside the one the unmaking uses.
+    // Both are casts thrown from where you stand, and a hand that has found one
+    // of them has found the other.
+    hotkey: 'V',
+    code: 'KeyV',
+    note:
+      'Mark the nearest body and call three katanas up out of the dark around it. ' +
+      'They go in one after another and come out together — and what they come out of ' +
+      'does not fall.',
+    attack: true
+  },
+  {
     id: 'ascendance',
     category: 'buff',
     // Rewritten each frame while the boon is up with the seconds left on it,

@@ -1298,6 +1298,142 @@ export class Editor {
     R(sparks, i, 'life', 0.05, 2, 0.01, 'last (s)');
     R(sparks, i, 'size', 0.01, 0.3, 0.005, 'size (m)');
     R(sparks, i, 'gravity', -40, 0, 0.5, 'fall (m/s²)');
+
+    this._buildFocus(folder);
+  }
+
+  /**
+   * The held shot, in the order it happens: what earns it, what it costs the
+   * thing it hits, and only then what it looks like.
+   *
+   * The seven layers of the burst each get their own sub-folder rather than one
+   * long list, because the way anyone actually tunes a stack this deep is by
+   * switching six of them off — and a `*Enabled` box at the top of its own
+   * folder is a solo button.
+   */
+  _buildFocus(parent) {
+    const R = Editor.range;
+    const f = settings.gunplay.focus;
+    const folder = parent.addFolder('The held shot (hold right button)');
+
+    folder.add(f, 'enabled').name('enabled');
+    // The number the whole gesture is: three seconds of standing still in the
+    // open. Under about one and it is not a decision, over about five and
+    // nobody ever takes the shot.
+    R(folder, f, 'charge', 0.2, 8, 0.1, 'held for (s)');
+    // 0 is "the offer stands while the button is down", which is the default.
+    R(folder, f, 'hold', 0, 6, 0.1, 'offer lapses after (s)');
+    R(folder, f, 'speed', 50, 500, 5, 'round speed (m/s)');
+    R(folder, f, 'drop', 0, 10, 0.1, 'round falls (m/s²)');
+    R(folder, f, 'tracer', 1, 8, 0.1, 'tracer × ordinary');
+
+    const cost = folder.addFolder('What it costs');
+    R(cost, f, 'damage', 10, 500, 5, 'body shot');
+    R(cost, f, 'headDamage', 10, 600, 5, 'head shot');
+    // The one that decides whether this is an anti-body round or a way of
+    // clearing a group.
+    R(cost, f, 'blastRadius', 0, 12, 0.1, 'blast reaches (m)');
+    R(cost, f, 'blastDamage', 0, 400, 5, 'blast at the centre');
+    R(cost, f, 'impulse', 0, 20, 0.1, 'shove (m/s)');
+    R(cost, f, 'lift', 0, 12, 0.1, 'lift (m/s)');
+    R(cost, f, 'spin', 0, 8, 0.05, 'fold');
+
+    const feel = folder.addFolder('What it feels like');
+    R(feel, f, 'recoilPitch', 0, 8, 0.05, 'kick up (deg)');
+    R(feel, f, 'recoilYaw', 0, 4, 0.05, 'kick sideways (deg)');
+    R(feel, f, 'shake', 0, 0.5, 0.005, 'knock firing (m)');
+    R(feel, f, 'blastShake', 0, 0.6, 0.005, 'knock landing (m)');
+    R(feel, f, 'hitStop', 0, 0.4, 0.005, 'freeze (s)');
+    R(feel, f, 'hitStopScale', 0.01, 1, 0.01, 'freeze depth');
+
+    const b = f.burst;
+    const burst = folder.addFolder('The burst');
+    burst.add(b, 'enabled').name('burst enabled');
+    // The two masters. `radius` sets the scale of every shaped layer at once;
+    // `life` is what the shell's and the core's own fractions are measured on.
+    R(burst, b, 'radius', 0.5, 8, 0.05, 'opens to (m)');
+    R(burst, b, 'life', 0.2, 4, 0.05, 'lasts (s)');
+    R(burst, b, 'intensity', 0.1, 4, 0.05, 'brightness');
+    R(burst, b, 'light', 0, 300, 1, 'light');
+    R(burst, b, 'lightRange', 2, 80, 0.5, 'light reach (m)');
+    burst.addColor(b, 'lightColor').name('light colour');
+
+    const shell = burst.addFolder('1. The arc mesh');
+    shell.add(b, 'shellEnabled').name('shown');
+    shell.addColor(b, 'shellColor').name('colour');
+    shell.addColor(b, 'shellCoreColor').name('line colour');
+    R(shell, b, 'meridians', 1, 16, 1, 'meridians');
+    R(shell, b, 'parallels', 1, 12, 1, 'parallels');
+    // A fraction of the gap between two lines, so it means the same thing at
+    // any count.
+    R(shell, b, 'arcWidth', 0.005, 0.4, 0.005, 'arc width');
+    R(shell, b, 'shellRim', 0.5, 8, 0.1, 'rim falloff');
+    R(shell, b, 'shellWarp', 0, 0.6, 0.005, 'boil (m)');
+    R(shell, b, 'shellDetail', 0.5, 8, 0.1, 'boil detail');
+    R(shell, b, 'shellLife', 0.05, 1, 0.01, 'share of the life');
+
+    const core = burst.addFolder('2. The core');
+    core.add(b, 'coreEnabled').name('shown');
+    core.addColor(b, 'coreColor').name('colour');
+    core.addColor(b, 'coreHalo').name('halo');
+    R(core, b, 'coreSize', 0.2, 10, 0.05, 'size (m)');
+    R(core, b, 'coreLife', 0.02, 1, 0.01, 'share of the life');
+    R(core, b, 'coreSpikes', 0, 12, 1, 'spikes');
+    R(core, b, 'coreSpikeLength', 0, 4, 0.05, 'spike reach');
+
+    const decal = burst.addFolder('3. The cracks');
+    decal.add(b, 'decalEnabled').name('shown');
+    decal.addColor(b, 'decalColor').name('colour');
+    decal.addColor(b, 'decalCoreColor').name('hot colour');
+    R(decal, b, 'decalRadius', 0.2, 12, 0.1, 'radius (m)');
+    // Above this much floor clearance the round leaves no mark at all.
+    R(decal, b, 'decalReach', 0.2, 10, 0.1, 'fades over (m) up');
+    R(decal, b, 'decalDetail', 0.5, 16, 0.1, 'web detail');
+    R(decal, b, 'decalSpokes', 0, 24, 1, 'big cracks');
+    R(decal, b, 'decalScorch', 0, 2, 0.05, 'burn');
+    R(decal, b, 'decalWrite', 0.01, 1, 0.01, 'written over');
+
+    const debris = burst.addFolder('4. The debris');
+    debris.add(b, 'debrisEnabled').name('shown');
+    debris.addColor(b, 'debrisColor').name('colour');
+    R(debris, b, 'debris', 0, 48, 1, 'chunks');
+    R(debris, b, 'debrisSize', 0.01, 0.6, 0.005, 'size (m)');
+    R(debris, b, 'debrisSpeed', 0.5, 30, 0.1, 'thrown at (m/s)');
+    R(debris, b, 'debrisSpread', 0, 2, 0.01, 'spread');
+    R(debris, b, 'debrisGravity', -40, 0, 0.5, 'fall (m/s²)');
+    R(debris, b, 'debrisLife', 0.1, 4, 0.05, 'last (s)');
+
+    const shower = burst.addFolder('5. The sparks');
+    shower.add(b, 'sparksEnabled').name('shown');
+    shower.addColor(b, 'sparkColor').name('colour');
+    R(shower, b, 'sparks', 0, 200, 1, 'sparks');
+    R(shower, b, 'sparkSpeed', 0.5, 40, 0.5, 'thrown at (m/s)');
+    R(shower, b, 'sparkSize', 0.005, 0.4, 0.005, 'size (m)');
+    R(shower, b, 'sparkLife', 0.05, 3, 0.05, 'last (s)');
+    R(shower, b, 'sparkStretch', 0, 0.3, 0.005, 'streak');
+    R(shower, b, 'sparkDrag', 0.05, 8, 0.05, 'drag');
+    R(shower, b, 'sparkGravity', -40, 0, 0.5, 'fall (m/s²)');
+
+    const shards = burst.addFolder('6. The shards');
+    shards.add(b, 'shardsEnabled').name('shown');
+    shards.addColor(b, 'shardColor').name('colour');
+    shards.addColor(b, 'shardColorAlt').name('second colour');
+    R(shards, b, 'shards', 0, 160, 1, 'shards');
+    R(shards, b, 'shardSpeed', 0.5, 40, 0.5, 'thrown at (m/s)');
+    R(shards, b, 'shardSize', 0.01, 0.8, 0.005, 'length (m)');
+    R(shards, b, 'shardLife', 0.05, 3, 0.05, 'last (s)');
+    R(shards, b, 'shardDrag', 0.05, 8, 0.05, 'drag');
+    R(shards, b, 'shardGravity', -40, 0, 0.5, 'fall (m/s²)');
+
+    const haze = burst.addFolder('7. The haze');
+    haze.add(b, 'hazeEnabled').name('shown');
+    haze.addColor(b, 'hazeColor').name('colour');
+    R(haze, b, 'haze', 0, 32, 1, 'puffs');
+    R(haze, b, 'hazeOpacity', 0, 1, 0.01, 'opacity');
+    R(haze, b, 'hazeSize', 0.1, 4, 0.05, 'size (m)');
+    R(haze, b, 'hazeGrowth', 1, 8, 0.05, 'grows to ×');
+    R(haze, b, 'hazeRise', 0, 6, 0.05, 'climbs at (m/s)');
+    R(haze, b, 'hazeLife', 0.1, 5, 0.05, 'last (s)');
   }
 
   _buildCombat() {
@@ -1315,6 +1451,8 @@ export class Editor {
     this._buildSwordCombo(folder);
     this._buildAttack(folder, settings.voidBeam, 'Unmaking (B)');
     this._buildVoidBeam(folder);
+    this._buildAttack(folder, settings.crimsonRite, 'Crimson rite (V)');
+    this._buildCrimsonRite(folder);
     this._buildTargetRing(folder);
     this._buildSlice(folder);
 
@@ -1777,6 +1915,259 @@ export class Editor {
     R(unmake, c.unmake, 'edgeWidth', 0.01, 0.6, 0.005, 'burn line width');
     R(unmake, c.unmake, 'dissolveRise', 0, 1, 0.01, 'burns bottom-up by');
     unmake.addColor(c.unmake, 'edgeColor').name('burn line');
+  }
+
+  /**
+   * Everything the crimson rite calls up — see `vfx/CrimsonRite.js`.
+   *
+   * The move's own numbers are in the `Crimson rite (V)` folder above, with
+   * every other attack's, because it is the same machine as they are. This is
+   * the part of it that is *light* — and there is a great deal more of it than
+   * of the move, which is why it is a folder of its own.
+   *
+   * The folders are numbered in the order the layers are drawn, which is also
+   * the order the reference breaks the effect into. Every one of them has an
+   * `enabled` at the top so it can be soloed against the other five, and that
+   * is by far the fastest way to understand what any single number is doing.
+   *
+   * If only one control here is ever touched, make it the strokes' `tear`: it
+   * is how hard a stroke comes apart as it dies, and it is the whole difference
+   * between a cut and a glowing ribbon fading out.
+   */
+  _buildCrimsonRite(parent) {
+    const folder = parent.addFolder('Crimson rite VFX');
+    const R = Editor.range;
+    const c = settings.crimsonRite;
+
+    // The pacing. Everything after the cast is here rather than in `hits`,
+    // because the clip only marks two frames and the move has four impacts.
+    const beats = folder.addFolder('Choreography');
+    R(beats, c, 'height', 0, 2.4, 0.01, 'blades ring at (m)');
+    R(beats, c, 'stabs', 1, 6, 1, 'thrusts');
+    R(beats, c, 'wound', 0, 20, 0.5, 'per thrust (health)');
+    R(beats, c.beats, 'mark', 0.05, 2, 0.01, 'ink wells up over (s)');
+    R(beats, c.beats, 'charge', 0.2, 4, 0.05, 'gives up after (s)');
+    R(beats, c.beats, 'between', 0.05, 1, 0.01, 'thrusts ordered every (s)');
+    R(beats, c.beats, 'hold', 0, 1.5, 0.01, 'held on the points (s)');
+    R(beats, c.beats, 'rend', 0.1, 2, 0.05, 'tear-out (s)');
+    R(beats, c.beats, 'settle', 0.1, 3, 0.05, 'ink sinks over (s)');
+    R(beats, c.beats, 'abandon', 0.5, 8, 0.05, 'gives up waiting after (s)');
+    R(beats, c, 'stabShake', 0, 1, 0.01, 'thrust shake (m)');
+    R(beats, c, 'rendShake', 0, 1, 0.01, 'tear-out shake (m)');
+    R(beats, c, 'markRing', 0, 3, 0.05, 'mark ring ×');
+    R(beats, c, 'stabRing', 0, 3, 0.05, 'thrust ring ×');
+    R(beats, c, 'rendRing', 0, 3, 0.05, 'tear-out ring ×');
+    R(beats, c, 'stabMist', 0, 4, 0.05, 'thrust cloud ×');
+    R(beats, c, 'rendMist', 0, 4, 0.05, 'tear-out cloud ×');
+
+    /* ---- 1 · the strokes ---- */
+    const trails = folder.addFolder('1. Slash trails');
+    const t = c.trails;
+    trails.add(t, 'enabled').name('shown');
+    trails.addColor(t, 'coreColor').name('razor colour');
+    trails.addColor(t, 'color').name('body colour');
+    trails.addColor(t, 'edgeColor').name('tail colour');
+    R(trails, t, 'intensity', 0, 8, 0.05, 'brightness');
+    R(trails, t, 'razor', 0, 1, 0.01, 'razor sits at');
+    R(trails, t, 'razorWidth', 0.01, 0.5, 0.005, 'razor width');
+    R(trails, t, 'core', 0, 5, 0.05, 'razor heat');
+    R(trails, t, 'falloff', 0.2, 6, 0.05, 'body falloff');
+    R(trails, t, 'tip', 0.05, 2, 0.01, 'tip sharpness');
+    R(trails, t, 'draw', 0.01, 0.9, 0.01, 'swept over (of life)');
+    R(trails, t, 'headSoft', 0.01, 0.4, 0.005, 'head feather');
+    R(trails, t, 'headFlare', 0, 6, 0.05, 'head heat');
+    R(trails, t, 'detail', 0.2, 12, 0.1, 'tear detail');
+    R(trails, t, 'flow', 0, 6, 0.05, 'tear crawl');
+    R(trails, t, 'tear', 0, 3, 0.01, 'tears apart by');
+    R(trails, t, 'hair', 2, 80, 0.5, 'filaments');
+    R(trails, t, 'hairDepth', 0, 1, 0.01, 'filament depth');
+
+    // The same look, twice, as two gestures. A big radius with a small sweep is
+    // a nearly straight streak (a thrust); a small radius with a large sweep is
+    // most of a circle (the tear-out).
+    for (const [key, title] of [
+      ['stabArc', "1a. The thrust's stroke"],
+      ['rendArc', "1b. The tear-out's strokes"]
+    ]) {
+      const arc = folder.addFolder(title);
+      const a = c[key];
+      R(arc, a, 'count', 0, 8, 1, 'strokes');
+      R(arc, a, 'spread', 0, 2, 0.01, 'fan opens by (rad)');
+      R(arc, a, 'radius', 0.2, 6, 0.05, 'arc radius (m)');
+      R(arc, a, 'sweep', 0.1, 5, 0.05, 'arc spans (rad)');
+      R(arc, a, 'width', 0.02, 1.5, 0.01, 'width (of radius)');
+      R(arc, a, 'life', 0.05, 2, 0.01, 'lasts (s)');
+      R(arc, a, 'pitch', 0, 3, 0.05, 'sheared forward by');
+      R(arc, a, 'strength', 0, 3, 0.05, 'master ×');
+    }
+
+    /* ---- 2 · the mist ---- */
+    const mist = folder.addFolder('2. Blood mist & splatter');
+    const m = c.mist;
+    mist.add(m, 'enabled').name('shown');
+    mist.addColor(m, 'deepColor').name('deep colour');
+    mist.addColor(m, 'color').name('body colour');
+    mist.addColor(m, 'hotColor').name('hot colour');
+    R(mist, m, 'intensity', 0, 3, 0.01, 'master ×');
+    R(mist, m, 'drag', 0.05, 10, 0.05, 'drag');
+    R(mist, m, 'gravity', -30, 0, 0.1, 'fall (m/s²)');
+    R(mist, m, 'puffs', 0, 90, 1, 'cloud puffs');
+    R(mist, m, 'puffSpeed', 0, 10, 0.05, 'puffs thrown at (m/s)');
+    R(mist, m, 'puffRise', -2, 4, 0.05, 'puffs lift (m/s)');
+    R(mist, m, 'puffLife', 0.1, 4, 0.05, 'puffs last (s)');
+    R(mist, m, 'size', 0.05, 2, 0.01, 'puff size (m)');
+    R(mist, m, 'grow', 0, 8, 0.05, 'puff grows by ×');
+    R(mist, m, 'opacity', 0, 1, 0.01, 'cloud opacity');
+    R(mist, m, 'setback', 0, 1.5, 0.01, 'cloud sits back (m)');
+    R(mist, m, 'erode', 0, 1.5, 0.01, 'cloud raggedness');
+    R(mist, m, 'detail', 0.2, 10, 0.1, 'cloud detail');
+    R(mist, m, 'churn', 0, 4, 0.05, 'cloud churn');
+    R(mist, m, 'drops', 0, 140, 1, 'drops');
+    R(mist, m, 'dropSpeed', 0, 30, 0.1, 'drops thrown at (m/s)');
+    R(mist, m, 'dropLife', 0.05, 3, 0.05, 'drops last (s)');
+    R(mist, m, 'spray', 0, 2, 0.01, 'drop cone (rad)');
+    R(mist, m, 'splatSize', 0.005, 0.3, 0.005, 'drop size (m)');
+    R(mist, m, 'splatStretch', 0, 8, 0.05, 'drop stretch');
+    R(mist, m, 'hot', 0, 2, 0.01, 'heat in the blood');
+
+    /* ---- 3 · the floor ---- */
+    const rings = folder.addFolder('3. Impact shockwave');
+    const g = c.rings;
+    rings.add(g, 'enabled').name('shown');
+    rings.addColor(g, 'color').name('front colour');
+    rings.addColor(g, 'coreColor').name('flash colour');
+    rings.addColor(g, 'crackColor').name('crack colour');
+    rings.addColor(g, 'scorchColor').name('burn colour');
+    R(rings, g, 'intensity', 0, 6, 0.05, 'brightness');
+    R(rings, g, 'radius', 0.5, 10, 0.1, 'reaches (m)');
+    R(rings, g, 'life', 0.2, 5, 0.05, 'lasts (s)');
+    R(rings, g, 'rings', 1, 6, 1, 'fronts in the train');
+    R(rings, g, 'ringGap', 0.02, 0.4, 0.005, 'launched apart by (of life)');
+    R(rings, g, 'ringReach', 0.4, 1, 0.01, 'each reaches ×');
+    R(rings, g, 'width', 0.005, 0.2, 0.001, 'front width');
+    R(rings, g, 'softness', 0.005, 0.2, 0.001, 'front feather');
+    R(rings, g, 'cracks', 0, 40, 1, 'cracks');
+    R(rings, g, 'crackLength', 0.1, 1, 0.01, 'crack length');
+    R(rings, g, 'crackWidth', 0.002, 0.08, 0.001, 'crack width');
+    R(rings, g, 'crackGlow', 0, 5, 0.05, 'crack heat');
+    R(rings, g, 'scorch', 0, 1, 0.01, 'burn depth');
+    R(rings, g, 'scorchRadius', 0.05, 1, 0.01, 'burn reaches');
+    R(rings, g, 'scorchFade', 0.05, 1, 0.01, 'burn fades over');
+    R(rings, g, 'lift', 0, 0.2, 0.005, 'off the floor (m)');
+
+    /* ---- 4 · the ink ---- */
+    const aura = folder.addFolder('4. Dark aura');
+    const a = c.aura;
+    aura.add(a, 'enabled').name('shown');
+    aura.addColor(a, 'inkColor').name('ink colour');
+    aura.addColor(a, 'rimColor').name('rim colour');
+    R(aura, a, 'opacity', 0, 1, 0.01, 'opacity');
+    R(aura, a, 'rim', 0, 2, 0.01, 'rim heat');
+    R(aura, a, 'radius', 0.2, 5, 0.05, 'stands out at (m)');
+    R(aura, a, 'height', 0.5, 8, 0.05, 'reaches up (m)');
+    R(aura, a, 'scale', 0.2, 5, 0.05, 'feature size');
+    R(aura, a, 'rise', 0, 3, 0.01, 'climbs at');
+    R(aura, a, 'warp', 0, 3, 0.01, 'threads hook by');
+    R(aura, a, 'threshold', 0.1, 0.95, 0.01, 'ink cut at');
+    R(aura, a, 'sharpness', 0.01, 0.6, 0.005, 'cut sharpness');
+    R(aura, a, 'curl', 0, 2, 0.01, 'lean at the top (m)');
+    R(aura, a, 'curlSpeed', 0, 4, 0.05, 'lean speed');
+    R(aura, a, 'swirl', 0, 2, 0.01, 'shell turns at');
+
+    /* ---- 5 · the cinders ---- */
+    const cinders = folder.addFolder('5. Embers & particles');
+    const e = c.cinders;
+    cinders.add(e, 'enabled').name('shown');
+    cinders.addColor(e, 'color').name('colour');
+    cinders.addColor(e, 'coreColor').name('hot colour');
+    R(cinders, e, 'intensity', 0, 8, 0.05, 'brightness');
+    R(cinders, e, 'speed', 0, 30, 0.1, 'thrown at (m/s)');
+    R(cinders, e, 'life', 0.1, 4, 0.05, 'last (s)');
+    R(cinders, e, 'drag', 0.05, 8, 0.05, 'drag');
+    R(cinders, e, 'gravity', -20, 4, 0.1, 'fall (m/s²)');
+    R(cinders, e, 'rise', -2, 5, 0.05, 'lift (m/s)');
+    R(cinders, e, 'size', 0.005, 0.15, 0.001, 'size (m)');
+    R(cinders, e, 'stretch', 0, 8, 0.05, 'stretched by speed');
+    R(cinders, e, 'maxStretch', 1, 24, 0.5, 'longest streak ×');
+    R(cinders, e, 'halo', 0, 2, 0.01, 'halo');
+    R(cinders, e, 'flicker', 0, 1, 0.01, 'flicker depth');
+    R(cinders, e, 'flickerSpeed', 1, 60, 0.5, 'flicker speed');
+    R(cinders, e, 'stabCount', 0, 120, 1, 'shed per thrust');
+    R(cinders, e, 'stabStrength', 0, 3, 0.05, 'thrust ×');
+    R(cinders, e, 'spread', 0, 2, 0.01, 'shed cone (rad)');
+    R(cinders, e, 'rendCount', 0, 300, 1, 'thrown by the tear-out');
+    R(cinders, e, 'rendStrength', 0, 3, 0.05, 'tear-out ×');
+    R(cinders, e, 'rendRadius', 0, 3, 0.05, 'tear-out spread (m)');
+    R(cinders, e, 'drift', 0, 120, 1, 'drift out of the ink (/s)');
+    R(cinders, e, 'driftHeight', 0, 2, 0.01, 'drift starts at (m)');
+    R(cinders, e, 'driftSpread', 0, 2, 0.01, 'drift spread (of radius)');
+    R(cinders, e, 'driftStrength', 0, 2, 0.01, 'drift ×');
+
+    /* ---- 6 · the blades ---- */
+    const blades = folder.addFolder('6. The katanas');
+    const b = c.blades;
+    blades.add(b, 'enabled').name('shown');
+    R(blades, b, 'count', 1, 6, 1, 'blades');
+    // Rebuilds the pool when it moves — the scale is baked into the template
+    // rather than onto the instances, so this is the one control here that is
+    // not free. It is still live; it just does more work than its neighbours.
+    R(blades, b, 'length', 0.4, 3, 0.01, 'length (m)');
+    blades.add(b, 'flip').name('point is the other end');
+    R(blades, b, 'standoff', 0.3, 5, 0.05, 'wait at (m)');
+    R(blades, b, 'bite', 0, 1.5, 0.01, 'drive in to (m)');
+    R(blades, b, 'spreadHeight', 0, 1.5, 0.01, 'height spread (m)');
+    R(blades, b, 'stagger', 0, 0.6, 0.01, 'arrive apart by (s)');
+    R(blades, b, 'gatherDrift', 0, 2, 0.01, 'drifts in by (m)');
+    R(blades, b, 'hover', 0, 0.4, 0.005, 'hover (m)');
+    R(blades, b, 'hoverSpeed', 0, 10, 0.1, 'hover speed');
+    R(blades, b, 'spin', 0, 8, 0.05, 'turns at ± (rad/s)');
+    R(blades, b, 'quiver', 0, 0.2, 0.001, 'ring in the steel (m)');
+    R(blades, b, 'quiverSpeed', 5, 120, 1, 'ring speed');
+    R(blades, b, 'quiverDecay', 1, 30, 0.5, 'ring dies at');
+    R(blades, b, 'throughDistance', 0.5, 8, 0.05, 'leaves out to (m)');
+    R(blades, b, 'throughLift', 0, 4, 0.05, 'leaves rising by (m)');
+    R(blades, b, 'throughArc', 0, 3, 0.05, 'exit arc (m)');
+    R(blades, b, 'throughRoll', 0, 12, 0.1, 'rolls out by (rad)');
+    R(blades, b, 'fadeRise', 0, 4, 0.05, 'drifts up at (m/s)');
+    R(blades, b.beats, 'gather', 0.05, 1.5, 0.01, 'resolves over (s)');
+    R(blades, b.beats, 'thrust', 0.03, 0.6, 0.005, 'thrust takes (s)');
+    R(blades, b.beats, 'wrench', 0.05, 2, 0.01, 'tear-out takes (s)');
+    R(blades, b.beats, 'fade', 0.05, 2, 0.01, 'burns off over (s)');
+
+    const steel = blades.addFolder('The steel');
+    steel.addColor(b, 'bodyColor').name('body');
+    steel.addColor(b, 'sheenColor').name('sheen');
+    steel.addColor(b, 'rimColor').name('rim');
+    R(steel, b, 'rim', 0, 5, 0.05, 'rim strength');
+    R(steel, b, 'rimPower', 0.2, 8, 0.05, 'rim tightness');
+    steel.addColor(b, 'edgeColor').name('burn line');
+    R(steel, b, 'edgeEmissive', 0, 24, 0.1, 'burn line heat');
+    R(steel, b, 'edgeWidth', 0.01, 0.6, 0.005, 'burn line width');
+    R(steel, b, 'detail', 2, 120, 0.5, 'burn detail');
+    R(steel, b, 'burnRise', 0, 1, 0.01, 'burn runs along by');
+    R(steel, b, 'veins', 0, 2, 0.01, 'energy in the steel');
+    R(steel, b, 'veinFlow', 0, 6, 0.05, 'energy speed');
+
+    /* ---- the one light all six share ---- */
+    const light = folder.addFolder('The light');
+    const l = c.light;
+    light.addColor(l, 'color').name('colour');
+    R(light, l, 'intensity', 0, 60, 0.5, 'brightness');
+    R(light, l, 'range', 1, 40, 0.5, 'range (m)');
+    R(light, l, 'decay', 0.05, 2, 0.01, 'falls away over (s)');
+    R(light, l, 'mark', 0, 1, 0.01, 'mark ×');
+    R(light, l, 'stab', 0, 1, 0.01, 'thrust ×');
+    R(light, l, 'rend', 0, 1, 0.01, 'tear-out ×');
+
+    /* ---- and how the body leaves ---- */
+    const burn = folder.addFolder('The burn');
+    const u = c.unmake;
+    R(burn, u, 'corpseTime', 0, 6, 0.05, 'lies there (s)');
+    R(burn, u, 'dissolveTime', 0.1, 6, 0.05, 'burns away over (s)');
+    burn.addColor(u, 'edgeColor').name('burn line');
+    R(burn, u, 'edgeEmissive', 0, 24, 0.1, 'burn line heat');
+    R(burn, u, 'edgeWidth', 0.01, 0.6, 0.005, 'burn line width');
+    R(burn, u, 'dissolveRise', 0, 1, 0.01, 'burns bottom-up by');
   }
 
   /**

@@ -196,6 +196,14 @@ export class CharacterController {
      */
     this.voidBeam = null;
     /**
+     * The crimson rite — the same machine, on the same cast, and the only move
+     * in the project that goes on happening after its clip has finished. Its
+     * two beats mark a body and then let three katanas go at it; everything
+     * after that is on `vfx/CrimsonRite.js`'s own clock. See
+     * `settings.crimsonRite`.
+     */
+    this.crimsonRite = null;
+    /**
      * Every attack the body has, in the order a press is offered to them.
      *
      * The one list the controller reads and the one each attack checks to see
@@ -338,13 +346,28 @@ export class CharacterController {
     this.voidBeam = new Attack(this.mixer, this.clips.get('voidBeam'), this, {
       configKey: 'voidBeam'
     });
+    // And the rite, on the same cast — the body is asking for something in both
+    // of them, and there is one clip on the rig for that.
+    //
+    // The clip is **cloned**, and that is not tidiness: `AnimationMixer#clipAction`
+    // caches by clip and root, so two `Attack`s handed the same clip would be
+    // handed the same `AnimationAction` and would spend the whole game fighting
+    // over one weight. A clone carries a fresh uuid and therefore an action of
+    // its own, at the cost of a second copy of a few dozen keyframe tracks —
+    // which is a great deal cheaper than the second download that adding the
+    // same file to `ANIMATION_URLS` under a new name would have cost.
+    const cast = this.clips.get('voidBeam');
+    this.crimsonRite = new Attack(this.mixer, cast ? cast.clone() : null, this, {
+      configKey: 'crimsonRite'
+    });
     this.attacks = [
       this.attack,
       this.slashHit,
       this.crouchSlash,
       this.flipKick,
       this.swordCombo,
-      this.voidBeam
+      this.voidBeam,
+      this.crimsonRite
     ].filter((move) => move.available);
 
     this.locomotion = new Locomotion(
@@ -890,6 +913,7 @@ export class CharacterController {
     this.flipKick = null;
     this.swordCombo = null;
     this.voidBeam = null;
+    this.crimsonRite = null;
     this.mixer?.stopAllAction();
     this.mixer = null;
     this.locomotion = null;
