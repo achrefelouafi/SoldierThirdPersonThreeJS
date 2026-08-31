@@ -7,7 +7,11 @@ import {
   normaliseMirror
 } from './EquipmentCatalog.js';
 
-const STORAGE_KEY = 'character-equipment.loadout.v1';
+// Bumped to v2 when the catalog's weapon placements were replaced with the
+// tuned ones. A stored loadout wins over the catalog outright (`restore` before
+// `equipDefaults`), so anyone who had already loaded the site was pinned to the
+// old grip forever — the key change is what lets a new default reach them.
+const STORAGE_KEY = 'character-equipment.loadout.v2';
 /** Change kinds that alter what would be written — anything else is UI noise. */
 const PERSISTED_EVENTS = new Set(['equipped', 'unequipped', 'placed']);
 const SAVE_DELAY_MS = 400;

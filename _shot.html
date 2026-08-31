@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>shot</title>
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+    <style>
+      /* The page's own furniture is not part of a screenshot. */
+      body.shot .hint,
+      body.shot .loader,
+      body.shot .look-hint,
+      body.shot .stats,
+      body.shot .lil-gui,
+      body.shot .toast,
+      body.shot .toasts {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="viewport"></canvas>
+    <div id="loader" class="loader">
+      <div class="loader__inner">
+        <div class="loader__bar"><i id="loader-fill"></i></div>
+        <p class="loader__status" id="loader-status">…</p>
+      </div>
+    </div>
+    <p class="hint"></p>
+    <script type="module" src="./_shot.js"></script>
+  </body>
+</html>

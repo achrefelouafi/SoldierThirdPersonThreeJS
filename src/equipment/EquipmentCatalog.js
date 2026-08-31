@@ -72,9 +72,11 @@ export const ITEMS = [
     equipByDefault: true,
     locked: true,
     defaults: {
+      // Dialled in on the set and pasted back with the screen's "Copy
+      // defaults" — this is the grip everything else was authored against.
       bone: 'RightHand',
-      position: [-0.051, 0.102, 0.052],
-      rotation: [-168.3, 84, -0.8],
+      position: [-0.0081, 0.1093, 0.0535],
+      rotation: [-152.9985, 62.0427, -16.8781],
       scale: 1
     }
   },
@@ -101,12 +103,13 @@ export const ITEMS = [
     equipByDefault: true,
     locked: true,
     defaults: {
-      // A starting point, not a measurement: the grip is roughly where the
-      // katana's is because the two share a hand and an axis. Tune it on the
-      // set and paste the result back (the screen's "Copy defaults").
+      // Dialled in on the set, like the blade's. The two share a hand but not
+      // their numbers: the gun sits higher in the palm and is rolled most of a
+      // half-turn the other way, because the barrel leaves the fist where the
+      // blade's edge does.
       bone: 'RightHand',
-      position: [-0.051, 0.102, 0.052],
-      rotation: [-168.3, 84, -0.8],
+      position: [-0.1189, 0.3161, -0.0028],
+      rotation: [143.26, -36.7459, -147.994],
       scale: 1
     }
   },

@@ -325,7 +325,7 @@ anywhere else:
   name: 'Katana',
   category: 'weapons',
   url: './models/weapons/sword.glb',
-  defaults: { bone: 'RightHand', position: [-0.051, 0.102, 0.052], rotation: [-168.3, 84, -0.8], scale: 1 }
+  defaults: { bone: 'RightHand', position: [-0.0081, 0.1093, 0.0535], rotation: [-152.9985, 62.0427, -16.8781], scale: 1 }
 }
 ```
 
